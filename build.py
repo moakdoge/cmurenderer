@@ -45,7 +45,7 @@ def strip_local_imports(source: str) -> str:
     for node in tree.body:
         path = local_import_path(node)
         if path:
-            for i in range(node.lineno, node.end_lineno + 1):
+            for i in range(node.lineno, node.end_lineno + 1): # type: ignore
                 remove_lines.add(i)
 
     return "\n".join(
