@@ -3,7 +3,7 @@ import ast
 
 ROOT = Path(__file__).parent
 ENTRY = ROOT / "main.py"
-OUT = ROOT / "cmu_web.py"
+OUT = ROOT / "cmu_bundle.py"
 
 seen = set()
 parts = []
@@ -21,19 +21,19 @@ def module_to_path(module: str) -> Path | None:
     return None
 
 
-def local_import_path(node: ast.AST) -> tuple[Path | None, str]:
+def local_import_path(node: ast.AST) -> Path | None:
     if isinstance(node, ast.ImportFrom):
         if node.module is None:
-            return None, ""
-        return module_to_path(node.module), str(node.module)
+            return None
+        return module_to_path(node.module)
 
     if isinstance(node, ast.Import):
         for alias in node.names:
             path = module_to_path(alias.name)
             if path:
-                return path, alias.name
+                return path
 
-    return None, ""
+    return None
 
 
 def strip_local_imports(source: str) -> str:
@@ -45,7 +45,7 @@ def strip_local_imports(source: str) -> str:
     for node in tree.body:
         path = local_import_path(node)
         if path:
-            for i in range(node.lineno, node.end_lineno + 1): # type: ignore
+            for i in range(node.lineno, node.end_lineno + 1):
                 remove_lines.add(i)
 
     return "\n".join(
@@ -66,8 +66,7 @@ def add_file(path: Path):
     tree = ast.parse(source)
 
     for node in tree.body:
-        
-        dep, label = local_import_path(node)
+        dep = local_import_path(node)
         if dep:
             add_file(dep)
 

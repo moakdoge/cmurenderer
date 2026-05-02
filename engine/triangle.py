@@ -22,11 +22,11 @@ class Triangle():
             self.points[i] = p + position -existing_game.camera.position
             self.points[i] = self.points[i].rotate(Vector3.new(existing_game.camera.pitch,existing_game.camera.yaw,0))
             if self.points[i].z < 0:
-                invalid_points += 1
-                self.points[i].z = 1
+                #print(self.points[i].screen)
+                #self.points[i].z = -self.points[i].z
+                pass
         
-        if invalid_points >= len(self.points):
-            return
+
         #check offscreen
         if all(_.offscreen for _ in self.points):
             return
@@ -53,22 +53,31 @@ class Triangle():
         #calculate color  
         self._real_fill = fill.darker().darker().darker().darker().darker()
         if existing_game.configuration.shading:
-            normal = self.center.normal
-            closest_light: Light | None = None
-            closest_dist = 9999999999999999
-            for light in lights:
-                ds=light.position.distance(self.position)
-                if ds < closest_dist:
-                    closest_dist = ds
-                    closest_light = light
-            if closest_light is not None:
-                light_dir = closest_light.position
-                light_dir = light_dir.normal + closest_light.direction
-                ambient = 0.4
-                diffuse = max(0, normal.dot(existing_game.camera.direction))
-                brightness = ambient + (1 - ambient) * diffuse
-                self._real_fill = rgb(fill.red * brightness,fill.blue * brightness,fill.green* brightness)
+            normal = self.center.normal  # polygon/triangle face normal, normalized
 
+            ambient = 0.25
+            brightness = ambient
+
+            for light in lights:
+                # Direction from surface to light
+                light_dir = (light.position - self.center).normal
+
+                # Lambert diffuse
+                diffuse = max(0.0, normal.dot(light_dir))
+
+                # Optional distance falloff
+                dist = light.position.distance(self.center)
+                attenuation = 1.0 / (1.0 + 0.001 * dist * dist)
+
+                brightness += diffuse * light.brightness * attenuation
+
+            brightness = min(1.0, brightness)
+
+            self._real_fill = rgb(
+                int(fill.red * brightness),
+                int(fill.green * brightness),
+                int(fill.blue * brightness),
+            )
 
         
         self.extracted = [list(sublist) for sublist in screens]

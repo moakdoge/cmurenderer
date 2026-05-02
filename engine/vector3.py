@@ -31,8 +31,6 @@ class Vector3():
         focal = 150
         camera_offset = 0
         z = self.z + camera_offset
-        if z <= 0:
-            return (-1, -1)
         aspect = height / width
         screen_x = (self.x / z) * focal + width / 2
         screen_y = -(self.y / z) * focal * aspect + height / 2  # flip Y
