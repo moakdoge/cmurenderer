@@ -21,19 +21,19 @@ def module_to_path(module: str) -> Path | None:
     return None
 
 
-def local_import_path(node: ast.AST) -> Path | None:
+def local_import_path(node: ast.AST) -> tuple[Path | None, str]:
     if isinstance(node, ast.ImportFrom):
         if node.module is None:
-            return None
-        return module_to_path(node.module)
+            return None, ""
+        return module_to_path(node.module), str(node.module)
 
     if isinstance(node, ast.Import):
         for alias in node.names:
             path = module_to_path(alias.name)
             if path:
-                return path
+                return path, alias.name
 
-    return None
+    return None, ""
 
 
 def strip_local_imports(source: str) -> str:
@@ -66,7 +66,8 @@ def add_file(path: Path):
     tree = ast.parse(source)
 
     for node in tree.body:
-        dep = local_import_path(node)
+        
+        dep, label = local_import_path(node)
         if dep:
             add_file(dep)
 

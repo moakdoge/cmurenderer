@@ -48,7 +48,7 @@ class Triangle():
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        if ar < 180:
+        if ar < (180 / existing_game.configuration.quality):
             return
         #calculate color  
         self._real_fill = fill.darker().darker().darker().darker().darker()
