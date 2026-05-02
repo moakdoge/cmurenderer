@@ -99,7 +99,7 @@ class Vector3():
         y = self.x * sin_theta + self.y * cos_theta
         return Vector3(x, y, self.z)
 
-    def rotate(self, angle):
+    def rotate(self, angle: "Vector3"):
         m = self.rotate_y(angle.y)
         m = m.rotate_x(angle.x)
         m = m.rotate_z(angle.z)
@@ -449,6 +449,8 @@ from cmu_graphics import *
 
 
 utils: "CMUtils" = CMUtils()
+if TYPE_CHECKING:
+    from engine.shapes import Base3DShape
 class Game():
     class GameConfiguration():
         wireframe: bool = False
@@ -469,6 +471,7 @@ class Game():
         self._triangle_count = 0
         self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
+        self._shapes: list["Base3DShape"] = []
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -534,7 +537,12 @@ class Game():
             tri._shape.toFront()
         
     def tick(self):
+        self.clear_screen()
+        self.camera.tick()
+        for shape in self._shapes:
+            shape.draw()
         self.player.update()
+        self.zlayer_screen()
 
 
 # ===== engine/__init__.py =====
@@ -549,6 +557,74 @@ if not game.utils.is_web():
             break
 else:
     existing_game = game
+
+
+# ===== engine/shapes/__init__.py =====
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cmu_graphics.shape_logic import RGB
+from cmu_graphics import rgb
+class Base3DShape:
+    def __init__(self, position: Vector3, size: Vector3, fill: "RGB | None" = None) -> None:
+        self.position: Vector3 = position
+        self.size: Vector3 = size
+        self.fill: "RGB" = rgb(255,0,0)
+        self.rotation: Vector3 = Vector3.zero()
+        game._shapes.append(self)
+
+    def draw(self):
+        raise NotImplementedError
+
+
+# ===== engine/shapes/sphere.py =====
+
+import math
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from cmu_graphics.shape_logic import RGB
+
+class Sphere(Base3DShape):
+    def __init__(self, position: Vector3, radius: float, fill: "RGB") -> None:
+        super().__init__(position, Vector3.new(radius*2, radius*2, radius*2), fill=fill)
+        self.radius = radius
+        
+    def draw(self):
+        vertices: list[Vector3] = []
+        lat_steps = math.ceil(5 * game.configuration.quality)
+        lon_steps = math.ceil(30 * (game.configuration.quality/8))
+
+
+
+        for i in range(lat_steps + 1):
+            theta = i / lat_steps * math.pi
+            for j in range(lon_steps + 1):
+                phi = j / lon_steps * 2 * math.pi
+
+                x = self.size.x * math.sin(theta) * math.cos(phi)
+                y = self.size.y * math.cos(theta)
+                z = self.size.z * math.sin(theta) * math.sin(phi)
+
+                vertices.append(Vector3(x, y, z))
+        faces = []
+
+        for i in range(lat_steps):
+            for j in range(lon_steps):
+                p1 = i * (lon_steps + 1) + j
+                p2 = p1 + lon_steps + 1
+                p3 = p2 + 1
+                p4 = p1 + 1
+
+                faces.append((p1, p2, p3))
+                faces.append((p1, p3, p4))
+        for face in faces:
+            v1 = vertices[face[0]].rotate(self.rotation)
+            v2 = vertices[face[1]].rotate(self.rotation)#.rotate_x(math.radians((self.position.x / 400) * 360))
+            v3 = vertices[face[2]].rotate(self.rotation)#.rotate_x(math.radians((self.position.x / 400) * 360))
+            Triangle(self.position, v1, v2, v3, fill=self.fill)
 
 
 # ===== main.py =====
@@ -609,39 +685,6 @@ def renderCube(position = Vector3.new(0,-50,100), size = Vector3.new(50, 50, 50)
 
         Triangle(position,v1,v2,v3,fill=fill)
 
-def renderSphere(position = Vector3.new(100,100,0), radius=50, color=rgb(255,255,255)):
-    vertices = []
-    lat_steps = math.ceil(5 * game.configuration.quality)
-    lon_steps = math.ceil(30 * (game.configuration.quality/8))
-
-
-
-    for i in range(lat_steps + 1):
-        theta = i / lat_steps * math.pi
-        for j in range(lon_steps + 1):
-            phi = j / lon_steps * 2 * math.pi
-
-            x = radius * math.sin(theta) * math.cos(phi)
-            y = radius * math.cos(theta)
-            z = radius * math.sin(theta) * math.sin(phi)
-
-            vertices.append(Vector3(x, y, z))
-    faces = []
-
-    for i in range(lat_steps):
-        for j in range(lon_steps):
-            p1 = i * (lon_steps + 1) + j
-            p2 = p1 + lon_steps + 1
-            p3 = p2 + 1
-            p4 = p1 + 1
-
-            faces.append((p1, p2, p3))
-            faces.append((p1, p3, p4))
-    for face in faces:
-        v1 = vertices[face[0]].rotate_x(math.radians((position.x / 400) * 360))
-        v2 = vertices[face[1]].rotate_x(math.radians((position.x / 400) * 360))
-        v3 = vertices[face[2]].rotate_x(math.radians((position.x / 400) * 360))
-        Triangle(position, v1, v2, v3, fill=color)
 
 
 app.dt = 0.016
@@ -652,6 +695,7 @@ posX = 0
 
 
 
+sphere1 = Sphere(position=Vector3.new(0,0,100), fill=rgb(255,0,0), radius=100)
 
 
 fps_trend: list[float] = []
@@ -661,16 +705,7 @@ dt_ema = 1 / game.configuration.fps_target
 def onStep():
     global MAX_AREA, dt_ema
     start = time.perf_counter()
-    game.camera.tick()
     global posX
-
-    
-    game.clear_screen()
-    renderSphere(Vector3.new(0,0,100), color=rgb(255,0,0))
-    renderSphere(Vector3.new(0,0,300), color=rgb(0,255,0),radius=100)
-    renderSphere(Vector3.new(0,0,700), color=rgb(0,0,255),radius=200)
-    #renderCube(size=Vector3.new(500, 50, 50))
-    game.zlayer_screen()
     game.tick()
     posX += 1
 

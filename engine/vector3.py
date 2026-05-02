@@ -95,7 +95,7 @@ class Vector3():
         y = self.x * sin_theta + self.y * cos_theta
         return Vector3(x, y, self.z)
 
-    def rotate(self, angle):
+    def rotate(self, angle: "Vector3"):
         m = self.rotate_y(angle.y)
         m = m.rotate_x(angle.x)
         m = m.rotate_z(angle.z)

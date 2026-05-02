@@ -12,6 +12,8 @@ from engine.vector3 import Vector3
 from engine.cmu_utils import CMUtils
 utils: "CMUtils" = CMUtils()
 from engine.polygon_factory import PolygonFactory
+if TYPE_CHECKING:
+    from engine.shapes import Base3DShape
 class Game():
     class GameConfiguration():
         wireframe: bool = False
@@ -32,6 +34,7 @@ class Game():
         self._triangle_count = 0
         self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
+        self._shapes: list["Base3DShape"] = []
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -97,4 +100,9 @@ class Game():
             tri._shape.toFront()
         
     def tick(self):
+        self.clear_screen()
+        self.camera.tick()
+        for shape in self._shapes:
+            shape.draw()
         self.player.update()
+        self.zlayer_screen()
