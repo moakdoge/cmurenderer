@@ -151,78 +151,6 @@ class Light():
         lights.append(self)
 
 
-# ===== engine/camera.py =====
-
-import math
-
-
-
-class Camera():
-    def __init__(self, position: Vector3 = Vector3(0,0,0)) -> None:
-        self.position = position
-        self.pitch: float = 0
-        self.yaw: float = 0
-        self.roll: float = 0
-        self._x = 0
-        self.light = Light(self.position, self.direction)
-        pass
-    def tick(self):
-        self.light.position = self.position
-        self.light.direction = Vector3.new(0, 0, self.yaw)
-    @property
-    def direction(self):
-        return Vector3(
-                math.sin(self.yaw) * math.cos(self.pitch),
-                -math.sin(self.pitch),
-                math.cos(self.yaw) * math.cos(self.pitch)
-                ).normal
-    def __setattr__(self, name: str, value) -> None:
-        if name == "pitch":
-            value = max(math.radians(-90), min(math.radians(90), value))
-        object.__setattr__(self, name, value)
-
-    def __repr__(self) -> str:
-        st = f'Camera(position={self.position.__repr__()},yaw={math.ceil(math.degrees(self.yaw))},pitch={math.ceil(math.degrees(self.pitch))},roll={math.ceil(math.degrees(self.roll))})'
-        return st
-
-
-# ===== engine/player.py =====
-
-class Player():
-    def __init__(self, camera: Camera) -> None:
-        self.attached_camera = camera
-        self.position: Vector3 = Vector3.zero()
-        self.velocity: Vector3 = Vector3.new(0,0,0)
-        self.max_health = 100
-        self.health = 100
-        
-    def __setattr__(self, name: str, value) -> None:
-        if name == "position":
-            self.attached_camera.position = value
-        object.__setattr__(self, name, value)
-    def on_floor(self):
-        return (self.position.y <= 0)
-    
-    def update(self):
-        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0:
-            self.position += self.velocity
-        if not self.on_floor():
-            self.velocity -= Vector3.new(0,1.75,0)
-        else:
-            self.velocity.y = 0
-        self.velocity *= 0.8
-
-        if self.position.y < 0:
-            self.position.y = 0
-
-
-    def jump(self):
-        if self.on_floor():
-            self.velocity += Vector3.new(0, 12, 0)
-
-
-
-
 # ===== engine/triangle.py =====
 
 from typing import TYPE_CHECKING
@@ -354,11 +282,83 @@ class Triangle():
         return self.area(*self.extracted)
 
 
+# ===== engine/camera.py =====
+
+import math
+
+
+
+class Camera():
+    def __init__(self, position: Vector3 = Vector3(0,0,0)) -> None:
+        self.position = position
+        self.pitch: float = 0
+        self.yaw: float = 0
+        self.roll: float = 0
+        self._x = 0
+        self.light = Light(self.position, self.direction)
+        pass
+    def tick(self):
+        self.light.position = self.position
+        self.light.direction = Vector3.new(0, 0, self.yaw)
+    @property
+    def direction(self):
+        return Vector3(
+                math.sin(self.yaw) * math.cos(self.pitch),
+                -math.sin(self.pitch),
+                math.cos(self.yaw) * math.cos(self.pitch)
+                ).normal
+    def __setattr__(self, name: str, value) -> None:
+        if name == "pitch":
+            value = max(math.radians(-90), min(math.radians(90), value))
+        object.__setattr__(self, name, value)
+
+    def __repr__(self) -> str:
+        st = f'Camera(position={self.position.__repr__()},yaw={math.ceil(math.degrees(self.yaw))},pitch={math.ceil(math.degrees(self.pitch))},roll={math.ceil(math.degrees(self.roll))})'
+        return st
+
+
+# ===== engine/player.py =====
+
+class Player():
+    def __init__(self, camera: Camera) -> None:
+        self.attached_camera = camera
+        self.position: Vector3 = Vector3.zero()
+        self.velocity: Vector3 = Vector3.new(0,0,0)
+        self.max_health = 100
+        self.health = 100
+        
+    def __setattr__(self, name: str, value) -> None:
+        if name == "position":
+            self.attached_camera.position = value
+        object.__setattr__(self, name, value)
+    def on_floor(self):
+        return (self.position.y <= 0)
+    
+    def update(self):
+        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0:
+            self.position += self.velocity
+        if not self.on_floor():
+            self.velocity -= Vector3.new(0,1.75,0)
+        else:
+            self.velocity.y = 0
+        self.velocity *= 0.8
+
+        if self.position.y < 0:
+            self.position.y = 0
+
+
+    def jump(self):
+        if self.on_floor():
+            self.velocity += Vector3.new(0, 12, 0)
+
+
+
+
 # ===== engine/cmu_utils.py =====
 
 
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 
 if TYPE_CHECKING:
@@ -385,16 +385,20 @@ class CMUtils():
         return obj
 
     @staticmethod
-    def is_web():
-        return not (sys.implementation.name != "brython")
+    def is_web() -> Literal[False]:
+        return (sys.implementation.name == "brython") # type: ignore
 
+    @classmethod
+    def is_desktop(cls) -> Literal[True]:
+        return (sys.implementation.name == "cpython") # pyright: ignore[reportReturnType]
+    
     def run(self):
-        if sys.implementation.name == "cpython":
+        if self.is_desktop():
             main=sys.modules["__main__"]
             for glob, func in self._globals.items():
                 setattr(main, glob, func)
-                from cmu_graphics import cmu_graphics
-                cmu_graphics.run() # type: ignore
+            from cmu_graphics import cmu_graphics
+            cmu_graphics.run() # type: ignore
         else:
     
             for glob, func in self._globals.items():
@@ -447,11 +451,12 @@ from cmu_graphics import *
 utils: "CMUtils" = CMUtils()
 class Game():
     class GameConfiguration():
-        wireframe = False
-        max_triangles = 1950
-        shading = True
+        wireframe: bool = False
+        max_triangles: int = 1950
+        shading: bool = True
         quality: float = 0.75  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
+        fps_target: int = 30
 
     def __init__(self):
         global utils
@@ -464,6 +469,7 @@ class Game():
         self._triangle_count = 0
         self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
+        app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
 
@@ -483,7 +489,7 @@ class Game():
     
     @utils.make_global
     def onKeyPress(self,key):
-        speed=0.1
+        speed=math.radians(30)
         #camera
 
         if "up" == key: self.camera.pitch += speed
@@ -551,74 +557,10 @@ import sys,math
 import time
 
 
-IS_DESKTOP = (sys.implementation.name != "brython")
+
 from cmu_graphics import * # pyright: ignore[reportWildcardImportFromLibrary]
 app.stepsPerSecond = 9999999 
-app.targetFPS = 30
-MAX_AREA=180
 
-
-POLYGON_POOL: list[Polygon] = [Polygon(0, 0, 0, 0, 0, 0) for _ in range(2000)]
-pool_ind = 0
-
-def begin_frame():
-    global pool_ind
-    pool_ind = 0
-    for p in POLYGON_POOL:
-        p.visible = False
-
-def pool_polygon(*args, **kwargs) -> Polygon:
-    global pool_ind
-
-    if pool_ind >= len(POLYGON_POOL):
-        raise RuntimeError("Polygon pool exhausted")
-
-    poly = POLYGON_POOL[pool_ind]
-    pool_ind += 1
-    poly.visible = True
-
-    return poly
-
-def end_frame():
-    for i in range(pool_ind, len(POLYGON_POOL)):
-        POLYGON_POOL[i].visible = False
-
-
-
-
-def setPoints(img: Image, points: list[list[float]]):
-    p0, p1, p2 = points
-
-    x0, y0 = p0
-    x1, y1 = p1
-    x2, y2 = p2
-
-    img.left = x0
-    img.top = y0  # assuming you meant .top, not .right
-
-    w = img.width
-    h = img.height
-
-    if w == 0 or h == 0:
-        return
-
-    # local image x-axis maps to triangle edge p0 -> p1
-    ax_x = (x1 - x0) / w
-    ax_y = (y1 - y0) / w
-
-    # local image y-axis maps to triangle edge p0 -> p2
-    ay_x = (x2 - x0) / h
-    ay_y = (y2 - y0) / h
-
-    img.transformMatrix = [
-        [ax_x, ay_x],
-        [ax_y, ay_y],
-    ]
-
-    # IMPORTANT:
-    # the matrix already contains rotation/shear/scale.
-    # leaving rotateAngle active probably applies rotation twice.
-    img.rotateAngle = 0
 
 
 
@@ -699,19 +641,9 @@ def renderSphere(position = Vector3.new(100,100,0), radius=50, color=rgb(255,255
         v1 = vertices[face[0]].rotate_x(math.radians((position.x / 400) * 360))
         v2 = vertices[face[1]].rotate_x(math.radians((position.x / 400) * 360))
         v3 = vertices[face[2]].rotate_x(math.radians((position.x / 400) * 360))
-        Triangle(position, v1, v2, v3, fill=color, texture="/home/moakdoge/Downloads/downloads_extra_old/file.png")
+        Triangle(position, v1, v2, v3, fill=color)
 
 
-
-app.inspectorEnabled = False
-import math
-
-
-    
-
-
-
-app.lastPos = None
 app.dt = 0.016
 app.fpsLabel = Label("FPS: 0", 370, 20)
 app.triangleLabel = Label("Triangles: 0", 360, 50)
@@ -723,8 +655,7 @@ posX = 0
 
 
 fps_trend: list[float] = []
-dt_ema = 1 / app.targetFPS
-MAX = 600
+dt_ema = 1 / game.configuration.fps_target
 #i = Image("/home/moakdoge/Downloads/Pipoya RPG Tileset 32x32/LightShadow_pipo.png", 50, 50)
 #print(i._shape.__dict__)
 def onStep():
@@ -746,10 +677,10 @@ def onStep():
     app.dt = max(0.0001, time.perf_counter() - start)
     game.fps = math.floor(1/app.dt)
     fps_trend.append(app.dt)
-    if len(fps_trend) > MAX:
+    if len(fps_trend) > 600:
         fps_trend.pop(0)
 
-    target_dt = 1 / app.targetFPS
+    target_dt = 1 / game.configuration.fps_target
     dt_ema = (dt_ema * 0.9) + (app.dt * 0.1)
     performance_ratio = target_dt / dt_ema
 
@@ -765,7 +696,7 @@ def onStep():
 
         game.configuration.quality = max(0.25, min(4.0, game.configuration.quality))
 
-        print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{app.targetFPS}")
+        print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{game.configuration.fps_target}")
 
     #okay.
     MAX_AREA = 180 / (game.configuration.quality*2)

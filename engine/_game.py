@@ -14,11 +14,12 @@ utils: "CMUtils" = CMUtils()
 from engine.polygon_factory import PolygonFactory
 class Game():
     class GameConfiguration():
-        wireframe = False
-        max_triangles = 1950
-        shading = True
+        wireframe: bool = False
+        max_triangles: int = 1950
+        shading: bool = True
         quality: float = 0.75  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
+        fps_target: int = 30
 
     def __init__(self):
         global utils
@@ -31,6 +32,7 @@ class Game():
         self._triangle_count = 0
         self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
+        app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
 

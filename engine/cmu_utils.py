@@ -1,6 +1,6 @@
 
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 
 if TYPE_CHECKING:
@@ -27,11 +27,15 @@ class CMUtils():
         return obj
 
     @staticmethod
-    def is_web():
-        return not (sys.implementation.name != "brython")
+    def is_web() -> Literal[False]:
+        return (sys.implementation.name == "brython") # type: ignore
 
+    @classmethod
+    def is_desktop(cls) -> Literal[True]:
+        return (sys.implementation.name == "cpython") # pyright: ignore[reportReturnType]
+    
     def run(self):
-        if sys.implementation.name == "cpython":
+        if self.is_desktop():
             main=sys.modules["__main__"]
             for glob, func in self._globals.items():
                 setattr(main, glob, func)
