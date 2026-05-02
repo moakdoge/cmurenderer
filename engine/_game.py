@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from cmu_graphics import *
 
 from engine.camera import Camera
+from engine.light import Light
 from engine.player import Player
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
@@ -22,6 +23,7 @@ class Game():
         quality: float = 0.75  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
+        enable_auto_quality: bool = False
 
     def __init__(self):
         global utils
@@ -35,6 +37,7 @@ class Game():
         self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
+        self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -81,8 +84,7 @@ class Game():
             self._triangle_count -= 1
     
     def clear_screen(self):
-        app.group.clear()
-        for tri in self.triangles:
+        for tri in self.triangles[:]:
             tri.delete()
         self._triangle_count = 0
     

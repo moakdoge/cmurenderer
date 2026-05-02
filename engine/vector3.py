@@ -128,3 +128,10 @@ class Vector3():
     def dot(self, b):
         return self.x * b.x + self.y * b.y + self.z * b.z
 
+
+    def intersect_near(self, b: "Vector3") -> "Vector3":
+        # edge a -> b crosses z = NEAR
+        NEAR = 1.0
+        a = self
+        t = (NEAR - a.z) / (b.z - a.z)
+        return a + (b - a) * t

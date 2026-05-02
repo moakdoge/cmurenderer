@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 from engine.shapes import Base3DShape
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
+from engine.light import lights
+from cmu_graphics import rgb
 
 if TYPE_CHECKING:
     from cmu_graphics.shape_logic import RGB
@@ -53,4 +55,26 @@ class Cube(Base3DShape):
             v1 = v1.rotate(self.rotation)
             v2 = v2.rotate(self.rotation)
             v3 = v3.rotate(self.rotation)
-            Triangle(self.position,v1,v2,v3,fill=self.fill)
+            normal = (v2 - v1).cross(v3 - v1).normal
+            center = (v1 + v2 + v3) * (1 / 3) + self.position
+
+            ambient = 0.45
+            brightness = ambient
+            if lights:
+                for light in lights:
+                    light_dir = (light.position - center).normal
+                    diffuse = max(0.0, normal.dot(light_dir))
+                    dist = light.position.distance(center)
+                    attenuation = 1.0 / (1.0 + 0.00025 * dist * dist)
+                    brightness += diffuse * light.brightness * attenuation
+            else:
+                brightness = 1.0
+
+            brightness = min(1.0, brightness)
+            face_fill = rgb(
+                int(self.fill.red * brightness),
+                int(self.fill.green * brightness),
+                int(self.fill.blue * brightness),
+            )
+
+            Triangle(self.position, v1, v2, v3, fill=face_fill, render_lights=False)

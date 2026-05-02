@@ -9,7 +9,7 @@ from engine import game
 
 
 from cmu_graphics import * # pyright: ignore[reportWildcardImportFromLibrary]
-app.stepsPerSecond = 9999999 
+app.stepsPerSecond = 120 
 
 from engine.shapes.sphere import Sphere
 
@@ -44,27 +44,28 @@ def onStep():
 
     app.dt = max(0.0001, time.perf_counter() - start)
     game.fps = math.floor(1/app.dt)
-    fps_trend.append(app.dt)
-    if len(fps_trend) > 600:
-        fps_trend.pop(0)
+    if game.configuration.enable_auto_quality:
+        fps_trend.append(app.dt)
+        if len(fps_trend) > 600:
+            fps_trend.pop(0)
 
-    target_dt = 1 / game.configuration.fps_target
-    dt_ema = (dt_ema * 0.9) + (app.dt * 0.1)
-    performance_ratio = target_dt / dt_ema
+        target_dt = 1 / game.configuration.fps_target
+        dt_ema = (dt_ema * 0.9) + (app.dt * 0.1)
+        performance_ratio = target_dt / dt_ema
 
-    
-    
-    RANGE = 0.05
+        
+        
+        RANGE = 0.05
 
-    if posX %4 == 0 :
-        if performance_ratio < (1-RANGE): # below target FPS
-            game.configuration.quality *= max(0.90, 1 - (0.985 - performance_ratio) * 0.18)
-        elif performance_ratio > (1+RANGE): # above target FPS
-            game.configuration.quality *= min(1.08, 1 + (performance_ratio - 1.015) * 0.12)
+        if posX %4 == 0 :
+            if performance_ratio < (1-RANGE): # below target FPS
+                game.configuration.quality *= max(0.90, 1 - (0.985 - performance_ratio) * 0.18)
+            elif performance_ratio > (1+RANGE): # above target FPS
+                game.configuration.quality *= min(1.08, 1 + (performance_ratio - 1.015) * 0.12)
 
-        game.configuration.quality = max(0.25, min(4.0, game.configuration.quality))
+            game.configuration.quality = max(0.25, min(4.0, game.configuration.quality))
 
-        print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{game.configuration.fps_target}")
+            print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{game.configuration.fps_target}")
 
     #okay.
     MAX_AREA = 180 / (game.configuration.quality*2)

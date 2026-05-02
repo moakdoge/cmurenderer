@@ -9,22 +9,47 @@ if TYPE_CHECKING:
 existing_game: "Game"
 
 class Triangle():
-    def __init__(self, position: Vector3, *points: Vector3, fill=rgb(255,255,255), texture: str | None = None):
+    def __init__(
+        self,
+        position: Vector3,
+        *points: Vector3,
+        fill=rgb(255,255,255),
+        texture: str | None = None,
+        pretransformed: bool = False,
+        render_lights: bool = True
+    ):
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
         self._count = len(points)
 
 
-        invalid_points = 0
-        #calculate camera offset
-        for i, p in enumerate(self.points):
-            self.points[i] = p + position -existing_game.camera.position
-            self.points[i] = self.points[i].rotate(Vector3.new(existing_game.camera.pitch,existing_game.camera.yaw,0))
-            if self.points[i].z < 0:
-                #print(self.points[i].screen)
-                #self.points[i].z = -self.points[i].z
-                pass
+        if not pretransformed:
+            # calculate camera offset and rotate into view space
+            for i, p in enumerate(self.points):
+                self.points[i] = p + position - existing_game.camera.position
+                self.points[i] = self.points[i].rotate(
+                    Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
+                )
+
+        clipped = self.clip_near()
+        if not clipped:
+            return
+
+        if len(clipped) > 1:
+            _, second = clipped
+            Triangle(
+                Vector3.zero(),
+                *second,
+                fill=fill,
+                texture=texture,
+                pretransformed=True,
+                render_lights=render_lights
+            )
+
+        self.points = list(clipped[0])
+        self._count = len(self.points)
+        
         
 
         #check offscreen
@@ -48,11 +73,11 @@ class Triangle():
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        if ar < (180 / existing_game.configuration.quality):
+        if ar < (50 / existing_game.configuration.quality):
             return
         #calculate color  
         self._real_fill = fill.darker().darker().darker().darker().darker()
-        if existing_game.configuration.shading:
+        if existing_game.configuration.shading and render_lights:
             normal = self.center.normal  # polygon/triangle face normal, normalized
 
             ambient = 0.25
@@ -92,6 +117,39 @@ class Triangle():
             self._shape.border = fill
         existing_game.add_triangle(self)
     
+
+    def clip_near(self):
+        points = self.points
+        NEAR = 1.0
+        inside = [p for p in points if p.z >= NEAR]
+        outside = [p for p in points if p.z < NEAR]
+
+        if len(inside) == 3:
+            return [(points[0], points[1], points[2])]
+
+        if len(inside) == 0:
+            return []
+
+        if len(inside) == 1:
+            a = inside[0]
+            b, c = outside
+
+            ab = a.intersect_near(b)
+            ac = a.intersect_near(c)
+
+            return [(a, ab, ac)]
+
+        # len(inside) == 2
+        a, b = inside
+        c = outside[0]
+
+        ac = a.intersect_near(c)
+        bc = b.intersect_near(c)
+
+        return [
+            (a, b, ac),
+            (b, bc, ac),
+        ]
     def delete(self):
         existing_game.polygon_factory.free(self._shape)
         self._shape.visible = False
