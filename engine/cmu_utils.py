@@ -35,8 +35,8 @@ class CMUtils():
             main=sys.modules["__main__"]
             for glob, func in self._globals.items():
                 setattr(main, glob, func)
-                from cmu_graphics import cmu_graphics
-                cmu_graphics.run() # type: ignore
+            from cmu_graphics import cmu_graphics
+            cmu_graphics.run() # type: ignore
         else:
     
             for glob, func in self._globals.items():

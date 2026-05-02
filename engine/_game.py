@@ -11,6 +11,7 @@ from engine.vector3 import Vector3
 
 from engine.cmu_utils import CMUtils
 utils: "CMUtils" = CMUtils()
+from engine.polygon_factory import PolygonFactory
 class Game():
     class GameConfiguration():
         wireframe = False
@@ -28,6 +29,7 @@ class Game():
         self.configuration = self.GameConfiguration()
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
+        self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -75,7 +77,8 @@ class Game():
     
     def clear_screen(self):
         app.group.clear()
-        self.triangles.clear()
+        for tri in self.triangles:
+            tri.delete()
         self._triangle_count = 0
     
     def zlayer_screen(self):

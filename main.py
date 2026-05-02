@@ -1,8 +1,10 @@
 import sys,math
 import time
 
+import engine
 from engine.cmu_utils import CMUtils
 from engine.triangle import Triangle
+import engine.triangle
 from engine.vector3 import Vector3
 from engine import game
 
@@ -172,8 +174,6 @@ app.fpsLabel = Label("FPS: 0", 370, 20)
 app.triangleLabel = Label("Triangles: 0", 360, 50)
 
 posX = 0
-
-
 
 
 

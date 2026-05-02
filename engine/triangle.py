@@ -4,16 +4,12 @@ from typing import TYPE_CHECKING
 from engine.light import Light, lights
 from engine.vector3 import Vector3
 from cmu_graphics import *
-
 if TYPE_CHECKING:
-    from ._game import Game
-_game: "Game | None" = None
-game: "Game"
+    from engine._game import Game
+existing_game: "Game"
+
 class Triangle():
     def __init__(self, position: Vector3, *points: Vector3, fill=rgb(255,255,255), texture: str | None = None):
-        global game
-
-        game = _game # type: ignore
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
@@ -23,8 +19,8 @@ class Triangle():
         invalid_points = 0
         #calculate camera offset
         for i, p in enumerate(self.points):
-            self.points[i] = p + position - game.camera.position
-            self.points[i] = self.points[i].rotate(Vector3.new(game.camera.pitch,game.camera.yaw,0))
+            self.points[i] = p + position -existing_game.camera.position
+            self.points[i] = self.points[i].rotate(Vector3.new(existing_game.camera.pitch,existing_game.camera.yaw,0))
             if self.points[i].z < 0:
                 invalid_points += 1
                 self.points[i].z = 1
@@ -56,7 +52,7 @@ class Triangle():
             return
         #calculate color  
         self._real_fill = fill.darker().darker().darker().darker().darker()
-        if game.configuration.shading:
+        if existing_game.configuration.shading:
             normal = self.center.normal
             closest_light: Light | None = None
             closest_dist = 9999999999999999
@@ -69,7 +65,7 @@ class Triangle():
                 light_dir = closest_light.position
                 light_dir = light_dir.normal + closest_light.direction
                 ambient = 0.4
-                diffuse = max(0, normal.dot(game.camera.direction))
+                diffuse = max(0, normal.dot(existing_game.camera.direction))
                 brightness = ambient + (1 - ambient) * diffuse
                 self._real_fill = rgb(fill.red * brightness,fill.blue * brightness,fill.green* brightness)
 
@@ -77,20 +73,21 @@ class Triangle():
         
         self.extracted = [list(sublist) for sublist in screens]
 
-        self._shape = Polygon()
+        self._shape = existing_game.polygon_factory.reserve()
         self._shape.pointList = self.extracted
         #self._shape.pointList = self.extracted
         self._shape.fill = self._real_fill
         self._shape.zindex = self.z
-        if game.configuration.wireframe:
+        if existing_game.configuration.wireframe:
             self._shape.fill = None
             self._shape.border = fill
-        game.add_triangle(self)
+        existing_game.add_triangle(self)
     
     def delete(self):
+        existing_game.polygon_factory.free(self._shape)
         self._shape.visible = False
         del self._shape
-        game.remove_triangle(self)
+        existing_game.remove_triangle(self)
 
     def get_bounding_box(self): 
         min_x = rounded(min(self.screen[0][0], self.screen[1][0], self.screen[2][0]))
@@ -102,7 +99,7 @@ class Triangle():
         success = 0
         total_points = self._count
         dis = 250 ** 2
-        for _t in game.triangles:
+        for _t in existing_game.triangles:
             if _t.z < self.z:
                 continue
 

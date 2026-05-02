@@ -1,52 +1,5 @@
 
 
-# ===== engine/cmu_utils.py =====
-
-
-import sys
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from engine._game import Game
-class CMUtils():
-    _game: "Game"
-    
-
-    def __init__(self) -> None:
-        self._globals: dict = {}
-    @staticmethod
-    def register_game(obj) -> "Game":
-        CMUtils._game: "Game" = obj
-        return obj
-
-    def make_global(self, obj, name=None):
-        def wrapper(*args, **kwargs):
-            return CMUtils._game.__class__.__dict__[obj.__name__](
-                CMUtils._game,
-                *args,
-                **kwargs
-            )
-        self._globals[name or obj.__name__] = wrapper
-        return obj
-
-    @staticmethod
-    def is_web():
-        return not (sys.implementation.name != "brython")
-
-    def run(self):
-        if sys.implementation.name == "cpython":
-            main=sys.modules["__main__"]
-            for glob, func in self._globals.items():
-                setattr(main, glob, func)
-                from cmu_graphics import cmu_graphics
-                cmu_graphics.run() # type: ignore
-        else:
-    
-            for glob, func in self._globals.items():
-                globals()[glob] = func
-
-
 # ===== engine/vector3.py =====
 
 import math
@@ -78,12 +31,12 @@ class Vector3():
         x,y=self.screen if self.screen is not None else (-999999999999, -1)
         return (x < -BUFFER or x > 400+BUFFER) or (y < -BUFFER or y > 400+BUFFER)
     @property
-    def screen(self, width=400, height=400):
+    def screen(self, width=400, height=400) -> tuple[int, int]:
         focal = 150
         camera_offset = 0
         z = self.z + camera_offset
         if z <= 0:
-            return None
+            return (-1, -1)
         aspect = height / width
         screen_x = (self.x / z) * focal + width / 2
         screen_y = -(self.y / z) * focal * aspect + height / 2  # flip Y
@@ -99,14 +52,14 @@ class Vector3():
                 self.z * other
             )
         raise TypeError("Can only multiply Vector3 by scalar")
-    def __add__(self, other):
+    def __add__(self, other: "Vector3") -> "Vector3":
         if isinstance(other, Vector3):
             return Vector3(
                 self.x + other.x,
                 self.y + other.y,
                 self.z + other.z
             )
-    def __sub__(self, other):
+    def __sub__(self, other: "Vector3") -> "Vector3":
         if isinstance(other, Vector3):
             return Vector3(
                 self.x - other.x,
@@ -198,140 +151,6 @@ class Light():
         lights.append(self)
 
 
-# ===== engine/triangle.py =====
-
-from typing import TYPE_CHECKING
-
-
-from cmu_graphics import *
-
-if TYPE_CHECKING:
-    from ._game import Game
-_game: "Game | None" = None
-game: "Game"
-class Triangle():
-    def __init__(self, position: Vector3, *points: Vector3, fill=rgb(255,255,255), texture: str | None = None):
-        global game
-
-        game = _game
-        self.points: list[Vector3] = [*points]
-        self.position = position
-        self.fill = fill
-        self._count = len(points)
-
-
-        invalid_points = 0
-        #calculate camera offset
-        for i, p in enumerate(self.points):
-            self.points[i] = p + position - game.camera.position
-            self.points[i] = self.points[i].rotate(Vector3.new(game.camera.pitch,game.camera.yaw,0))
-            if self.points[i].z < 0:
-                invalid_points += 1
-                self.points[i].z = 1
-        
-        if invalid_points >= len(self.points):
-            return
-        #check offscreen
-        if all(_.offscreen for _ in self.points):
-            return
-        
-
-        #calculate z and screens
-        self.z = sum(_.z for _ in self.points) / self._count
-        screens = [_.screen for _ in self.points]
-        self.screen = screens
-        
-
-        
-        #check hidden
-        if None in screens:
-            self.screen = screens
-
-        self.center = Vector3.new(sum(_.x for _ in self.points)/self._count,sum(_.y for _ in self.points)/self._count,sum(_.z for _ in self.points)/self._count)
-        centScr = self.center.screen
-        self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
-        
-        ar = self.area(*self.screen)
-        if ar < 180:
-            return
-        #calculate color  
-        self._real_fill = fill.darker().darker().darker().darker().darker()
-        if game.configuration.shading:
-            normal = self.center.normal
-            closest_light: Light | None = None
-            closest_dist = 9999999999999999
-            for light in lights:
-                ds=light.position.distance(self.position)
-                if ds < closest_dist:
-                    closest_dist = ds
-                    closest_light = light
-            if closest_light is not None:
-                light_dir = closest_light.position
-                light_dir = light_dir.normal + closest_light.direction
-                ambient = 0.4
-                diffuse = max(0, normal.dot(game.camera.direction))
-                brightness = ambient + (1 - ambient) * diffuse
-                self._real_fill = rgb(fill.red * brightness,fill.blue * brightness,fill.green* brightness)
-
-
-        
-        self.extracted = [list(sublist) for sublist in screens]
-
-        self._shape = Polygon()
-        self._shape.pointList = self.extracted
-        #self._shape.pointList = self.extracted
-        self._shape.fill = self._real_fill
-        self._shape.zindex = self.z
-        if game.configuration.wireframe:
-            self._shape.fill = None
-            self._shape.border = fill
-        game.add_triangle(self)
-    
-    def delete(self):
-        self._shape.visible = False
-        del self._shape
-        game.remove_triangle(self)
-
-    def get_bounding_box(self): 
-        min_x = rounded(min(self.screen[0][0], self.screen[1][0], self.screen[2][0]))
-        max_x = rounded(max(self.screen[0][0], self.screen[1][0], self.screen[2][0]))
-        min_y = rounded(min(self.screen[0][1], self.screen[1][1], self.screen[2][1]))
-        max_y = rounded(max(self.screen[0][1], self.screen[1][1], self.screen[2][1])) 
-        return min_x, min_y, max_x, max_y
-    def is_covered(self):
-        success = 0
-        total_points = self._count
-        dis = 250 ** 2
-        for _t in game.triangles:
-            if _t.z < self.z:
-                continue
-
-            left, bottom, right, top = _t.get_bounding_box()
-            inside_points = 0
-            for x, y in self.screen:
-                if left < x < right and bottom < y < top:
-                    inside_points += 1
-
-            if inside_points / total_points >= 0.5:
-                return True 
-        
-        return False
-
-
-    def area(self, p1, p2, p3):
-        return abs(
-            (p2[0] - p1[0]) * (p3[1] - p1[1])
-        - (p2[1] - p1[1]) * (p3[0] - p1[0])
-        )
-    @property
-    def rendered(self):
-        return self._shape
-
-    @property
-    def screen_area(self):
-        return self.area(*self.extracted)
-
-
 # ===== engine/camera.py =====
 
 import math
@@ -341,9 +160,9 @@ import math
 class Camera():
     def __init__(self, position: Vector3 = Vector3(0,0,0)) -> None:
         self.position = position
-        self.pitch = 0
-        self.yaw = 0
-        self.roll = 0
+        self.pitch: float = 0
+        self.yaw: float = 0
+        self.roll: float = 0
         self._x = 0
         self.light = Light(self.position, self.direction)
         pass
@@ -404,6 +223,218 @@ class Player():
 
 
 
+# ===== engine/triangle.py =====
+
+from typing import TYPE_CHECKING
+
+
+from cmu_graphics import *
+if TYPE_CHECKING:
+    from engine._game import Game
+existing_game: "Game"
+
+class Triangle():
+    def __init__(self, position: Vector3, *points: Vector3, fill=rgb(255,255,255), texture: str | None = None):
+        self.points: list[Vector3] = [*points]
+        self.position = position
+        self.fill = fill
+        self._count = len(points)
+
+
+        invalid_points = 0
+        #calculate camera offset
+        for i, p in enumerate(self.points):
+            self.points[i] = p + position -existing_game.camera.position
+            self.points[i] = self.points[i].rotate(Vector3.new(existing_game.camera.pitch,existing_game.camera.yaw,0))
+            if self.points[i].z < 0:
+                invalid_points += 1
+                self.points[i].z = 1
+        
+        if invalid_points >= len(self.points):
+            return
+        #check offscreen
+        if all(_.offscreen for _ in self.points):
+            return
+        
+
+        #calculate z and screens
+        self.z = sum(_.z for _ in self.points) / self._count
+        screens: list[tuple[int, int]] = [_.screen for _ in self.points]
+        self.screen = screens
+        
+
+        
+        #check hidden
+        if None in screens:
+            self.screen = screens
+
+        self.center = Vector3.new(sum(_.x for _ in self.points)/self._count,sum(_.y for _ in self.points)/self._count,sum(_.z for _ in self.points)/self._count)
+        centScr = self.center.screen
+        self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
+        
+        ar = self.area(*self.screen)
+        if ar < 180:
+            return
+        #calculate color  
+        self._real_fill = fill.darker().darker().darker().darker().darker()
+        if existing_game.configuration.shading:
+            normal = self.center.normal
+            closest_light: Light | None = None
+            closest_dist = 9999999999999999
+            for light in lights:
+                ds=light.position.distance(self.position)
+                if ds < closest_dist:
+                    closest_dist = ds
+                    closest_light = light
+            if closest_light is not None:
+                light_dir = closest_light.position
+                light_dir = light_dir.normal + closest_light.direction
+                ambient = 0.4
+                diffuse = max(0, normal.dot(existing_game.camera.direction))
+                brightness = ambient + (1 - ambient) * diffuse
+                self._real_fill = rgb(fill.red * brightness,fill.blue * brightness,fill.green* brightness)
+
+
+        
+        self.extracted = [list(sublist) for sublist in screens]
+
+        self._shape = existing_game.polygon_factory.reserve()
+        self._shape.pointList = self.extracted
+        #self._shape.pointList = self.extracted
+        self._shape.fill = self._real_fill
+        self._shape.zindex = self.z
+        if existing_game.configuration.wireframe:
+            self._shape.fill = None
+            self._shape.border = fill
+        existing_game.add_triangle(self)
+    
+    def delete(self):
+        existing_game.polygon_factory.free(self._shape)
+        self._shape.visible = False
+        del self._shape
+        existing_game.remove_triangle(self)
+
+    def get_bounding_box(self): 
+        min_x = rounded(min(self.screen[0][0], self.screen[1][0], self.screen[2][0]))
+        max_x = rounded(max(self.screen[0][0], self.screen[1][0], self.screen[2][0]))
+        min_y = rounded(min(self.screen[0][1], self.screen[1][1], self.screen[2][1]))
+        max_y = rounded(max(self.screen[0][1], self.screen[1][1], self.screen[2][1])) 
+        return min_x, min_y, max_x, max_y
+    def is_covered(self):
+        success = 0
+        total_points = self._count
+        dis = 250 ** 2
+        for _t in existing_game.triangles:
+            if _t.z < self.z:
+                continue
+
+            left, bottom, right, top = _t.get_bounding_box()
+            inside_points = 0
+            for x, y in self.screen:
+                if left < x < right and bottom < y < top:
+                    inside_points += 1
+
+            if inside_points / total_points >= 0.5:
+                return True 
+        
+        return False
+
+
+    def area(self, p1, p2, p3):
+        return abs(
+            (p2[0] - p1[0]) * (p3[1] - p1[1])
+        - (p2[1] - p1[1]) * (p3[0] - p1[0])
+        )
+    @property
+    def rendered(self):
+        return self._shape
+
+    @property
+    def screen_area(self):
+        return self.area(*self.extracted)
+
+
+# ===== engine/cmu_utils.py =====
+
+
+import sys
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from engine._game import Game
+class CMUtils():
+    _game: "Game"
+    
+
+    def __init__(self) -> None:
+        self._globals: dict = {}
+    @staticmethod
+    def register_game(obj) -> "Game":
+        CMUtils._game: "Game" = obj
+        return obj
+
+    def make_global(self, obj, name=None):
+        def wrapper(*args, **kwargs):
+            return CMUtils._game.__class__.__dict__[obj.__name__](
+                CMUtils._game,
+                *args,
+                **kwargs
+            )
+        self._globals[name or obj.__name__] = wrapper
+        return obj
+
+    @staticmethod
+    def is_web():
+        return not (sys.implementation.name != "brython")
+
+    def run(self):
+        if sys.implementation.name == "cpython":
+            main=sys.modules["__main__"]
+            for glob, func in self._globals.items():
+                setattr(main, glob, func)
+                from cmu_graphics import cmu_graphics
+                cmu_graphics.run() # type: ignore
+        else:
+    
+            for glob, func in self._globals.items():
+                globals()[glob] = func
+
+
+# ===== engine/polygon_factory.py =====
+
+from cmu_graphics import Polygon
+
+class PolygonFactory:
+    def __init__(self, size: int = 2000) -> None:
+        self._pool: list[Polygon] = [
+            Polygon(0, 0, 0, 0, 0, 0, visible=False)
+            for _ in range(size)
+        ]
+
+        self._free: list[Polygon] = self._pool.copy()
+        self._in_use: set[Polygon] = set()
+
+    def reserve(self) -> Polygon:
+        if not self._free:
+            raise RuntimeError("Polygon pool exhausted")
+
+        poly = self._free.pop()
+        self._in_use.add(poly)
+
+        poly.visible = True
+        return poly
+
+    def free(self, poly: Polygon) -> None:
+        if poly not in self._in_use:
+            raise RuntimeError("Tried to free polygon that is not currently reserved")
+
+        self._in_use.remove(poly)
+        self._free.append(poly)
+
+        poly.visible = False
+
+
 # ===== engine/_game.py =====
 
 import math
@@ -431,6 +462,7 @@ class Game():
         self.configuration = self.GameConfiguration()
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
+        self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -451,7 +483,7 @@ class Game():
     
     @utils.make_global
     def onKeyPress(self,key):
-        speed=math.radians(30)
+        speed=0.1
         #camera
 
         if "up" == key: self.camera.pitch += speed
@@ -478,7 +510,8 @@ class Game():
     
     def clear_screen(self):
         app.group.clear()
-        self.triangles.clear()
+        for tri in self.triangles:
+            tri.delete()
         self._triangle_count = 0
     
     def zlayer_screen(self):
@@ -500,9 +533,16 @@ class Game():
 
 # ===== engine/__init__.py =====
 
-
 game = Game()
-_game = game
+
+if not game.utils.is_web():
+    import sys
+    for name, mod in sys.modules.items():
+        if name == "engine.triangle":
+            mod.existing_game = game # type: ignore
+            break
+else:
+    existing_game = game
 
 
 # ===== main.py =====
@@ -677,8 +717,6 @@ app.fpsLabel = Label("FPS: 0", 370, 20)
 app.triangleLabel = Label("Triangles: 0", 360, 50)
 
 posX = 0
-
-
 
 
 
