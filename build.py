@@ -1,3 +1,4 @@
+import datetime
 from pathlib import Path
 import ast
 
@@ -76,7 +77,16 @@ def add_file(path: Path):
     parts.append(cleaned)
 
 
+
+
 add_file(ENTRY)
 
+part1 = [
+    "### CREATED BY @MOAKDOGE ###",
+    f"### CREATED ON: {datetime.datetime.now().strftime("%D")} ###"
+]
+
+for line in part1[::-1]:
+    parts.insert(0, line)
 OUT.write_text("\n".join(parts), encoding="utf-8")
 print(f"Wrote {OUT}")

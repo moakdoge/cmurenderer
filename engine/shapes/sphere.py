@@ -16,8 +16,8 @@ class Sphere(Base3DShape):
         
     def draw(self):
         vertices: list[Vector3] = []
-        lat_steps =20#math.ceil(5 * game.configuration.quality)
-        lon_steps =20#math.ceil(30 * (game.configuration.quality/8))
+        lat_steps =5 if game.utils.is_web() else 15#math.ceil(5 * game.configuration.quality)
+        lon_steps =5 if game.utils.is_web() else 15#math.ceil(30 * (game.configuration.quality/8))
 
 
 

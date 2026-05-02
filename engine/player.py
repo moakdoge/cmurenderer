@@ -1,5 +1,6 @@
 from engine.vector3 import Vector3
 from engine.camera import Camera
+from cmu_graphics import app
 class Player():
     def __init__(self, camera: Camera) -> None:
         self.attached_camera = camera
@@ -17,7 +18,7 @@ class Player():
     
     def update(self):
         if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0:
-            self.position += self.velocity
+            self.position += (self.velocity*app.dt)
         if not self.on_floor():
             self.velocity -= Vector3.new(0,1.75,0)
         else:

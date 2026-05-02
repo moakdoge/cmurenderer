@@ -13,6 +13,10 @@ class Vector3():
     @classmethod
     def zero(cls) -> "Vector3":
         return cls(x=0,y=0,z=0)
+
+    @property
+    def magnitude(self):
+        return math.hypot(self.x, self.y, self.z)
     @property
     def normal(self):
         mag = math.sqrt((self.x*self.x)+ (self.y*self.y) + (self.z*self.z))
@@ -21,14 +25,14 @@ class Vector3():
         return Vector3.new(self.x/mag, self.y/mag, self.z/mag)
     @property
     def offscreen(self) -> bool:
-        BUFFER=150
+        BUFFER=100
         if self.screen is None:
             return True
         x,y=self.screen if self.screen is not None else (-999999999999, -1)
         return (x < -BUFFER or x > 400+BUFFER) or (y < -BUFFER or y > 400+BUFFER)
     @property
     def screen(self, width=400, height=400) -> tuple[int, int]:
-        focal = 150
+        focal = 180
         camera_offset = 0
         z = self.z + camera_offset
         aspect = height / width

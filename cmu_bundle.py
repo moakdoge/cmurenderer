@@ -1,3 +1,5 @@
+### CREATED BY @MOAKDOGE ###
+### CREATED ON: 05/01/26 ###
 
 
 # ===== engine/vector3.py =====
@@ -17,6 +19,10 @@ class Vector3():
     @classmethod
     def zero(cls) -> "Vector3":
         return cls(x=0,y=0,z=0)
+
+    @property
+    def magnitude(self):
+        return math.hypot(self.x, self.y, self.z)
     @property
     def normal(self):
         mag = math.sqrt((self.x*self.x)+ (self.y*self.y) + (self.z*self.z))
@@ -25,18 +31,16 @@ class Vector3():
         return Vector3.new(self.x/mag, self.y/mag, self.z/mag)
     @property
     def offscreen(self) -> bool:
-        BUFFER=150
+        BUFFER=100
         if self.screen is None:
             return True
         x,y=self.screen if self.screen is not None else (-999999999999, -1)
         return (x < -BUFFER or x > 400+BUFFER) or (y < -BUFFER or y > 400+BUFFER)
     @property
     def screen(self, width=400, height=400) -> tuple[int, int]:
-        focal = 150
+        focal = 180
         camera_offset = 0
         z = self.z + camera_offset
-        if z <= 0:
-            return (-1, -1)
         aspect = height / width
         screen_x = (self.x / z) * focal + width / 2
         screen_y = -(self.y / z) * focal * aspect + height / 2  # flip Y
@@ -135,6 +139,13 @@ class Vector3():
         return self.x * b.x + self.y * b.y + self.z * b.z
 
 
+    def intersect_near(self, b: "Vector3") -> "Vector3":
+        # edge a -> b crosses z = NEAR
+        NEAR = 1.0
+        a = self
+        t = (NEAR - a.z) / (b.z - a.z)
+        return a + (b - a) * t
+
 
 # ===== engine/light.py =====
 
@@ -188,6 +199,7 @@ class Camera():
 
 # ===== engine/player.py =====
 
+from cmu_graphics import app
 class Player():
     def __init__(self, camera: Camera) -> None:
         self.attached_camera = camera
@@ -205,7 +217,7 @@ class Player():
     
     def update(self):
         if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0:
-            self.position += self.velocity
+            self.position += (self.velocity*app.dt)
         if not self.on_floor():
             self.velocity -= Vector3.new(0,1.75,0)
         else:
@@ -234,24 +246,53 @@ if TYPE_CHECKING:
 existing_game: "Game"
 
 class Triangle():
-    def __init__(self, position: Vector3, *points: Vector3, fill=rgb(255,255,255), texture: str | None = None):
+    def __init__(
+        self,
+        position: Vector3,
+        *points: Vector3,
+        fill=rgb(255,255,255),
+        texture: str | None = None,
+        pretransformed: bool = False,
+        render_lights: bool = True,
+        skip_near_clip: bool = False
+    ):
+        
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
         self._count = len(points)
+        self._real_fill= fill
 
 
-        invalid_points = 0
-        #calculate camera offset
-        for i, p in enumerate(self.points):
-            self.points[i] = p + position -existing_game.camera.position
-            self.points[i] = self.points[i].rotate(Vector3.new(existing_game.camera.pitch,existing_game.camera.yaw,0))
-            if self.points[i].z < 0:
-                invalid_points += 1
-                self.points[i].z = 1
-        
-        if invalid_points >= len(self.points):
+        if not pretransformed:
+            # calculate camera offset and rotate into view space
+            for i, p in enumerate(self.points):
+                self.points[i] = p + position - existing_game.camera.position
+                self.points[i] = self.points[i].rotate(
+                    Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
+                )
+
+        clipped = [tuple(self.points)] if skip_near_clip else self.clip_near()
+        if not clipped:
             return
+
+        if len(clipped) > 1:
+            _, second = clipped
+            Triangle(
+                Vector3.zero(),
+                *second,
+                fill=fill,
+                texture=texture,
+                pretransformed=True,
+                render_lights=render_lights,
+                skip_near_clip=True
+            )
+
+        self.points = list(clipped[0])
+        self._count = len(self.points)
+        
+        
+
         #check offscreen
         if all(_.offscreen for _ in self.points):
             return
@@ -268,30 +309,51 @@ class Triangle():
         if None in screens:
             self.screen = screens
 
-        self.center = Vector3.new(sum(_.x for _ in self.points)/self._count,sum(_.y for _ in self.points)/self._count,sum(_.z for _ in self.points)/self._count)
+        self.extracted = [list(sublist) for sublist in self.screen]
+
+        self.center = Vector3.new(
+            sum(_.x for _ in self.points) / self._count,
+            sum(_.y for _ in self.points) / self._count,
+            sum(_.z for _ in self.points) / self._count
+        )
+        if existing_game.configuration.backface_cull:
+            p1, p2, p3 = tuple(self.points)
+            normal = (p2 - p1).cross(p3 - p1).normal
+            view_dir = (-self.center).normal
+            if normal.dot(view_dir) <= 0:
+                return
+
+        existing_game.add_triangle(self)
         centScr = self.center.screen
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        if ar < (180 / existing_game.configuration.quality):
+        if ar < (50 / existing_game.configuration.quality):
             return
         #calculate color  
+        
         self._real_fill = fill.darker().darker().darker().darker().darker()
-        if existing_game.configuration.shading:
-            normal = self.center.normal  # polygon/triangle face normal, normalized
+        if existing_game.configuration.shading and render_lights:
+            p1, p2, p3 = tuple(self.points)
+            normal = (p2 - p1).cross(p3 - p1).normal
 
             ambient = 0.25
             brightness = ambient
 
             for light in lights:
+                # Transform light position into view space for consistent lighting
+                light_pos = light.position - existing_game.camera.position
+                light_pos = light_pos.rotate(
+                    Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
+                )
                 # Direction from surface to light
-                light_dir = (light.position - self.center).normal
+                light_dir = (light_pos - self.center).normal
 
                 # Lambert diffuse
                 diffuse = max(0.0, normal.dot(light_dir))
 
                 # Optional distance falloff
-                dist = light.position.distance(self.center)
+                dist = light_pos.distance(self.center)
                 attenuation = 1.0 / (1.0 + 0.001 * dist * dist)
 
                 brightness += diffuse * light.brightness * attenuation
@@ -304,23 +366,60 @@ class Triangle():
                 int(fill.blue * brightness),
             )
 
-        
-        self.extracted = [list(sublist) for sublist in screens]
 
+
+
+    def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
         self._shape.pointList = self.extracted
         #self._shape.pointList = self.extracted
         self._shape.fill = self._real_fill
         self._shape.zindex = self.z
+        self._shape.border = None
         if existing_game.configuration.wireframe:
             self._shape.fill = None
-            self._shape.border = fill
-        existing_game.add_triangle(self)
+            self._shape.border = self.fill
+        
+
     
+
+    def clip_near(self):
+        points = self.points
+        NEAR = 1.0
+        inside = [p for p in points if p.z >= NEAR]
+        outside = [p for p in points if p.z < NEAR]
+
+        if len(inside) == 3:
+            return [(points[0], points[1], points[2])]
+
+        if len(inside) == 0:
+            return []
+
+        if len(inside) == 1:
+            a = inside[0]
+            b, c = outside
+
+            ab = a.intersect_near(b)
+            ac = a.intersect_near(c)
+
+            return [(a, ab, ac)]
+
+        # len(inside) == 2
+        a, b = inside
+        c = outside[0]
+
+        ac = a.intersect_near(c)
+        bc = b.intersect_near(c)
+
+        return [
+            (a, b, ac),
+            (b, bc, ac),
+        ]
     def delete(self):
-        existing_game.polygon_factory.free(self._shape)
-        self._shape.visible = False
-        del self._shape
+        if hasattr(self, "_shape"):
+            existing_game.polygon_factory.free(self._shape)
+            self._shape.visible = False
+            del self._shape
         existing_game.remove_triangle(self)
 
     def get_bounding_box(self): 
@@ -361,6 +460,14 @@ class Triangle():
     @property
     def screen_area(self):
         return self.area(*self.extracted)
+    
+    @property
+    def physical_area(self):
+        p1, p2, p3 = tuple(self.points)
+        v1 = p2 - p1
+        v2 = p3 - p1
+        cross_product = v1.cross(v2)
+        return 0.5 * cross_product.magnitude
 
 
 # ===== engine/cmu_utils.py =====
@@ -460,14 +567,21 @@ from cmu_graphics import *
 utils: "CMUtils" = CMUtils()
 if TYPE_CHECKING:
     from engine.shapes import Base3DShape
+
 class Game():
     class GameConfiguration():
         wireframe: bool = False
+        debug: bool = True
+        backface_cull: bool = False
+        zbuffer: bool = True
+        zbuffer_scale: int = 6
         max_triangles: int = 1950
         shading: bool = True
-        quality: float = 0.75  #increase for worse quality
+        quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
-        fps_target: int = 30
+        fps_target: int = 10
+        enable_auto_quality: bool = True
+        min_quality: float = 0.25 if utils.is_desktop() else 0.01
 
     def __init__(self):
         global utils
@@ -478,9 +592,11 @@ class Game():
         self.configuration = self.GameConfiguration()
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
+        self._triangle_seq = 0
         self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
+        self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -493,7 +609,7 @@ class Game():
         forward.x *= -1
         forward.y = 0
         right = Vector3(forward.z, 0, -forward.x).normal
-        speed = 2
+        speed = 60
         if "w" in key: self.player.velocity += forward * speed * 1
         if "s" in key: self.player.velocity += forward * speed * -1
         if "a" in key: self.player.velocity += right * speed * -1
@@ -509,17 +625,24 @@ class Game():
         if "right"== key: self.camera.yaw -= speed
         if "left" == key: self.camera.yaw += speed
         
+
+
         if "space" == key:
             self.player.jump()
 
+        ### DEBUG ###
+        if not self.configuration.debug:
+            return
+    
+        if "q" == key:
+            self.configuration.wireframe = not self.configuration.wireframe
 
         
     def add_triangle(self, triangle):
-        if self._triangle_count > self.configuration.max_triangles * self.configuration.quality:
-            return
-        if not triangle in self.triangles:
-            self.triangles.append(triangle)
-            self._triangle_count += 1
+        self._triangle_seq += 1
+        triangle._sort_id = self._triangle_seq
+        self.triangles.append(triangle)
+        self._triangle_count += 1
     
     def remove_triangle(self, triangle):
         if triangle in self.triangles:
@@ -527,10 +650,10 @@ class Game():
             self._triangle_count -= 1
     
     def clear_screen(self):
-        app.group.clear()
-        for tri in self.triangles:
+        for tri in self.triangles[:]:
             tri.delete()
         self._triangle_count = 0
+        self._triangle_seq = 0
     
     def zlayer_screen(self):
         ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.quality*1.125)))
@@ -538,18 +661,111 @@ class Game():
         sorted_triangles = sorted(
             self.triangles,
             reverse=True,
-            key=lambda tri: tri.z + tri.screen_area * 0.35
+            key=lambda tri: tri.z + (tri._sort_id * 1e-6) # type: ignore
         )
 
-        sorted_triangles.sort(reverse=True, key=lambda tri: tri.z)
         for tri in sorted_triangles:
+            if not hasattr(tri, "_shape"):
+                continue
             tri._shape.toFront()
-        
+    def render_triangles(self):
+        zbuffer = None
+        zwidth = 0
+        zheight = 0
+        zscale = max(1, int(self.configuration.zbuffer_scale))
+        if self.configuration.zbuffer:
+            zwidth = max(1, 400 // zscale)
+            zheight = max(1, 400 // zscale)
+            zbuffer = [[float("inf")] * zwidth for _ in range(zheight)]
+
+        sorted_triangles = sorted(
+            self.triangles,
+            reverse=True,
+            key = lambda tri: tri.physical_area * tri.screen_area
+        )[0:math.floor(self.configuration.quality*(len(self.triangles)-1))]
+
+
+        if utils.is_desktop():
+            import cmu_graphics.cmu_graphics as cmp
+            cmp.DRAWING_LOCK.__enter__(True)
+
+        for triangle in sorted_triangles:
+            if zbuffer is not None and not self._zbuffer_test(triangle, zbuffer, zwidth, zheight, zscale):
+                continue
+            triangle.draw()
+
+
+        if utils.is_desktop():
+            import cmu_graphics.cmu_graphics as cmp
+            cmp.DRAWING_LOCK.__exit__(None, None, None)
+
+    def _zbuffer_test(
+        self,
+        triangle: Triangle,
+        zbuffer: list[list[float]],
+        zwidth: int,
+        zheight: int,
+        zscale: int
+    ) -> bool:
+
+        x0, y0 = triangle.screen[0]
+        x1, y1 = triangle.screen[1]
+        x2, y2 = triangle.screen[2]
+
+        min_x = max(0, int(min(x0, x1, x2) // zscale))
+        max_x = min(zwidth - 1, int(max(x0, x1, x2) // zscale))
+        min_y = max(0, int(min(y0, y1, y2) // zscale))
+        max_y = min(zheight - 1, int(max(y0, y1, y2) // zscale))
+
+        if min_x > max_x or min_y > max_y:
+            return False
+
+        z0 = triangle.points[0].z
+        z1 = triangle.points[1].z
+        z2 = triangle.points[2].z
+
+        def edge(ax, ay, bx, by, cx, cy):
+            return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax)
+
+        sx0 = x0 / zscale
+        sy0 = y0 / zscale
+        sx1 = x1 / zscale
+        sy1 = y1 / zscale
+        sx2 = x2 / zscale
+        sy2 = y2 / zscale
+
+        area = edge(sx0, sy0, sx1, sy1, sx2, sy2)
+        if area == 0:
+            return False
+
+        visible = False
+        for y in range(min_y, max_y + 1):
+            row = zbuffer[y]
+            py = y + 0.5
+            for x in range(min_x, max_x + 1):
+                px = x + 0.5
+                w0 = edge(sx1, sy1, sx2, sy2, px, py)
+                w1 = edge(sx2, sy2, sx0, sy0, px, py)
+                w2 = edge(sx0, sy0, sx1, sy1, px, py)
+
+                if (w0 >= 0 and w1 >= 0 and w2 >= 0) or (w0 <= 0 and w1 <= 0 and w2 <= 0):
+                    w0 /= area
+                    w1 /= area
+                    w2 /= area
+                    z = (z0 * w0) + (z1 * w1) + (z2 * w2)
+                    if z < row[x]:
+                        row[x] = z
+                        visible = True
+
+        return visible
+
     def tick(self):
+
         self.clear_screen()
         self.camera.tick()
         for shape in self._shapes:
             shape.draw()
+        self.render_triangles()
         self.player.update()
         self.zlayer_screen()
 
@@ -592,6 +808,7 @@ class Base3DShape:
 import math
 from typing import TYPE_CHECKING
 
+from cmu_graphics import rgb
 
 if TYPE_CHECKING:
     from cmu_graphics.shape_logic import RGB
@@ -620,27 +837,46 @@ class Cube(Base3DShape):
             )
 
         faces = [
-            (0,1,2), (0,2,3),  # back
-            (4,5,6), (4,6,7),  # front
-            (0,1,5), (0,5,4),  # bottom
-            (2,3,7), (2,7,6),  # top
-            (1,2,6), (1,6,5),  # right
-            (0,3,7), (0,7,4),  # left
+            (0, 1, 2, 3),  # back
+            (4, 5, 6, 7),  # front
+            (0, 1, 5, 4),  # bottom
+            (2, 3, 7, 6),  # top
+            (1, 2, 6, 5),  # right
+            (0, 3, 7, 4),  # left
         ]
-
-
 
         for face in faces:
             scale = 1
-        
-            v1: Vector3 = scaled_vertices[face[0]]*scale#.rotate_x(math.radians(posX)).rotate_y(math.radians(posX)).rotate_z(math.radians(posX)) * scale
-            v2: Vector3 = scaled_vertices[face[1]]*scale#.rotate_x(math.radians(posX)).rotate_y(math.radians(posX)).rotate_z(math.radians(posX)) * scale
-            v3: Vector3 = scaled_vertices[face[2]]*scale#.rotate_x(math.radians(posX)).rotate_y(math.radians(posX)).rotate_z(math.radians(posX)) * scale
 
-            v1 = v1.rotate(self.rotation)
-            v2 = v2.rotate(self.rotation)
-            v3 = v3.rotate(self.rotation)
-            Triangle(self.position,v1,v2,v3,fill=self.fill)
+            v1 = (scaled_vertices[face[0]] * scale).rotate(self.rotation)
+            v2 = (scaled_vertices[face[1]] * scale).rotate(self.rotation)
+            v3 = (scaled_vertices[face[2]] * scale).rotate(self.rotation)
+            v4 = (scaled_vertices[face[3]] * scale).rotate(self.rotation)
+
+            normal = (v2 - v1).cross(v4 - v1).normal
+            center = (v1 + v2 + v3 + v4) * 0.25 + self.position
+
+            ambient = 0.45
+            brightness = ambient
+            if lights:
+                for light in lights:
+                    light_dir = (light.position - center).normal
+                    diffuse = max(0.0, normal.dot(light_dir))
+                    dist = light.position.distance(center)
+                    attenuation = 1.0 / (1.0 + 0.00025 * dist * dist)
+                    brightness += diffuse * light.brightness * attenuation
+            else:
+                brightness = 1.0
+
+            brightness = min(1.0, brightness)
+            face_fill = rgb(
+                int(self.fill.red * brightness),
+                int(self.fill.green * brightness),
+                int(self.fill.blue * brightness),
+            )
+
+            Triangle(self.position, v1, v2, v3, fill=self.fill, render_lights=False)
+            Triangle(self.position, v1, v3, v4, fill=self.fill, render_lights=False)
 
 
 # ===== engine/shapes/sphere.py =====
@@ -659,8 +895,8 @@ class Sphere(Base3DShape):
         
     def draw(self):
         vertices: list[Vector3] = []
-        lat_steps =20#math.ceil(5 * game.configuration.quality)
-        lon_steps =20#math.ceil(30 * (game.configuration.quality/8))
+        lat_steps =5 if game.utils.is_web() else 30#math.ceil(5 * game.configuration.quality)
+        lon_steps =5 if game.utils.is_web() else 30#math.ceil(30 * (game.configuration.quality/8))
 
 
 
@@ -701,7 +937,7 @@ import time
 
 
 from cmu_graphics import * # pyright: ignore[reportWildcardImportFromLibrary]
-app.stepsPerSecond = 9999999 
+app.stepsPerSecond = 120 
 
 
 
@@ -735,27 +971,28 @@ def onStep():
 
     app.dt = max(0.0001, time.perf_counter() - start)
     game.fps = math.floor(1/app.dt)
-    fps_trend.append(app.dt)
-    if len(fps_trend) > 600:
-        fps_trend.pop(0)
+    if game.configuration.enable_auto_quality:
+        fps_trend.append(app.dt)
+        if len(fps_trend) > 600:
+            fps_trend.pop(0)
 
-    target_dt = 1 / game.configuration.fps_target
-    dt_ema = (dt_ema * 0.9) + (app.dt * 0.1)
-    performance_ratio = target_dt / dt_ema
+        target_dt = 1 / game.configuration.fps_target
+        dt_ema = (dt_ema * 0.9) + (app.dt * 0.1)
+        performance_ratio = target_dt / dt_ema
 
-    
-    
-    RANGE = 0.05
+        
+        
+        RANGE = 0.05
 
-    if posX %4 == 0 :
-        if performance_ratio < (1-RANGE): # below target FPS
-            game.configuration.quality *= max(0.90, 1 - (0.985 - performance_ratio) * 0.18)
-        elif performance_ratio > (1+RANGE): # above target FPS
-            game.configuration.quality *= min(1.08, 1 + (performance_ratio - 1.015) * 0.12)
+        if posX %4 == 0 :
+            if performance_ratio < (1-RANGE): # below target FPS
+                game.configuration.quality *= max(0.90, 1 - (0.985 - performance_ratio) * 0.18)
+            elif performance_ratio > (1+RANGE): # above target FPS
+                game.configuration.quality *= min(1.08, 1 + (performance_ratio - 1.015) * 0.12)
 
-        game.configuration.quality = max(0.25, min(4.0, game.configuration.quality))
+            game.configuration.quality = max(game.configuration.min_quality, min(4.0, game.configuration.quality))
 
-        print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{game.configuration.fps_target}")
+            print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{game.configuration.fps_target}")
 
     #okay.
     MAX_AREA = 180 / (game.configuration.quality*2)

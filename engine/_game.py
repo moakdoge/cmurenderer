@@ -15,15 +15,21 @@ utils: "CMUtils" = CMUtils()
 from engine.polygon_factory import PolygonFactory
 if TYPE_CHECKING:
     from engine.shapes import Base3DShape
+
 class Game():
     class GameConfiguration():
         wireframe: bool = False
+        debug: bool = True
+        backface_cull: bool = False
+        zbuffer: bool = True
+        zbuffer_scale: int = 6
         max_triangles: int = 1950
         shading: bool = True
-        quality: float = 0.75  #increase for worse quality
+        quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
-        fps_target: int = 30
-        enable_auto_quality: bool = False
+        fps_target: int = 10
+        enable_auto_quality: bool = True
+        min_quality: float = 0.25 if utils.is_desktop() else 0.01
 
     def __init__(self):
         global utils
@@ -34,6 +40,7 @@ class Game():
         self.configuration = self.GameConfiguration()
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
+        self._triangle_seq = 0
         self.polygon_factory: "PolygonFactory" = PolygonFactory()
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
@@ -50,7 +57,7 @@ class Game():
         forward.x *= -1
         forward.y = 0
         right = Vector3(forward.z, 0, -forward.x).normal
-        speed = 2
+        speed = 60
         if "w" in key: self.player.velocity += forward * speed * 1
         if "s" in key: self.player.velocity += forward * speed * -1
         if "a" in key: self.player.velocity += right * speed * -1
@@ -66,17 +73,24 @@ class Game():
         if "right"== key: self.camera.yaw -= speed
         if "left" == key: self.camera.yaw += speed
         
+
+
         if "space" == key:
             self.player.jump()
 
+        ### DEBUG ###
+        if not self.configuration.debug:
+            return
+    
+        if "q" == key:
+            self.configuration.wireframe = not self.configuration.wireframe
 
         
     def add_triangle(self, triangle):
-        if self._triangle_count > self.configuration.max_triangles * self.configuration.quality:
-            return
-        if not triangle in self.triangles:
-            self.triangles.append(triangle)
-            self._triangle_count += 1
+        self._triangle_seq += 1
+        triangle._sort_id = self._triangle_seq
+        self.triangles.append(triangle)
+        self._triangle_count += 1
     
     def remove_triangle(self, triangle):
         if triangle in self.triangles:
@@ -87,6 +101,7 @@ class Game():
         for tri in self.triangles[:]:
             tri.delete()
         self._triangle_count = 0
+        self._triangle_seq = 0
     
     def zlayer_screen(self):
         ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.quality*1.125)))
@@ -94,17 +109,110 @@ class Game():
         sorted_triangles = sorted(
             self.triangles,
             reverse=True,
-            key=lambda tri: tri.z + tri.screen_area * 0.35
+            key=lambda tri: tri.z + (tri._sort_id * 1e-6) # type: ignore
         )
 
-        sorted_triangles.sort(reverse=True, key=lambda tri: tri.z)
         for tri in sorted_triangles:
+            if not hasattr(tri, "_shape"):
+                continue
             tri._shape.toFront()
-        
+    def render_triangles(self):
+        zbuffer = None
+        zwidth = 0
+        zheight = 0
+        zscale = max(1, int(self.configuration.zbuffer_scale))
+        if self.configuration.zbuffer:
+            zwidth = max(1, 400 // zscale)
+            zheight = max(1, 400 // zscale)
+            zbuffer = [[float("inf")] * zwidth for _ in range(zheight)]
+
+        sorted_triangles = sorted(
+            self.triangles,
+            reverse=True,
+            key = lambda tri: tri.physical_area * tri.screen_area
+        )[0:math.floor(self.configuration.quality*(len(self.triangles)-1))]
+
+
+        if utils.is_desktop():
+            import cmu_graphics.cmu_graphics as cmp
+            cmp.DRAWING_LOCK.__enter__(True)
+
+        for triangle in sorted_triangles:
+            if zbuffer is not None and not self._zbuffer_test(triangle, zbuffer, zwidth, zheight, zscale):
+                continue
+            triangle.draw()
+
+
+        if utils.is_desktop():
+            import cmu_graphics.cmu_graphics as cmp
+            cmp.DRAWING_LOCK.__exit__(None, None, None)
+
+    def _zbuffer_test(
+        self,
+        triangle: Triangle,
+        zbuffer: list[list[float]],
+        zwidth: int,
+        zheight: int,
+        zscale: int
+    ) -> bool:
+
+        x0, y0 = triangle.screen[0]
+        x1, y1 = triangle.screen[1]
+        x2, y2 = triangle.screen[2]
+
+        min_x = max(0, int(min(x0, x1, x2) // zscale))
+        max_x = min(zwidth - 1, int(max(x0, x1, x2) // zscale))
+        min_y = max(0, int(min(y0, y1, y2) // zscale))
+        max_y = min(zheight - 1, int(max(y0, y1, y2) // zscale))
+
+        if min_x > max_x or min_y > max_y:
+            return False
+
+        z0 = triangle.points[0].z
+        z1 = triangle.points[1].z
+        z2 = triangle.points[2].z
+
+        def edge(ax, ay, bx, by, cx, cy):
+            return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax)
+
+        sx0 = x0 / zscale
+        sy0 = y0 / zscale
+        sx1 = x1 / zscale
+        sy1 = y1 / zscale
+        sx2 = x2 / zscale
+        sy2 = y2 / zscale
+
+        area = edge(sx0, sy0, sx1, sy1, sx2, sy2)
+        if area == 0:
+            return False
+
+        visible = False
+        for y in range(min_y, max_y + 1):
+            row = zbuffer[y]
+            py = y + 0.5
+            for x in range(min_x, max_x + 1):
+                px = x + 0.5
+                w0 = edge(sx1, sy1, sx2, sy2, px, py)
+                w1 = edge(sx2, sy2, sx0, sy0, px, py)
+                w2 = edge(sx0, sy0, sx1, sy1, px, py)
+
+                if (w0 >= 0 and w1 >= 0 and w2 >= 0) or (w0 <= 0 and w1 <= 0 and w2 <= 0):
+                    w0 /= area
+                    w1 /= area
+                    w2 /= area
+                    z = (z0 * w0) + (z1 * w1) + (z2 * w2)
+                    if z < row[x]:
+                        row[x] = z
+                        visible = True
+
+        return visible
+
     def tick(self):
+
         self.clear_screen()
         self.camera.tick()
         for shape in self._shapes:
             shape.draw()
+        self.render_triangles()
         self.player.update()
         self.zlayer_screen()

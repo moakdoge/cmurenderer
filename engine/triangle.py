@@ -16,12 +16,15 @@ class Triangle():
         fill=rgb(255,255,255),
         texture: str | None = None,
         pretransformed: bool = False,
-        render_lights: bool = True
+        render_lights: bool = True,
+        skip_near_clip: bool = False
     ):
+        
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
         self._count = len(points)
+        self._real_fill= fill
 
 
         if not pretransformed:
@@ -32,7 +35,7 @@ class Triangle():
                     Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
                 )
 
-        clipped = self.clip_near()
+        clipped = [tuple(self.points)] if skip_near_clip else self.clip_near()
         if not clipped:
             return
 
@@ -44,7 +47,8 @@ class Triangle():
                 fill=fill,
                 texture=texture,
                 pretransformed=True,
-                render_lights=render_lights
+                render_lights=render_lights,
+                skip_near_clip=True
             )
 
         self.points = list(clipped[0])
@@ -68,7 +72,21 @@ class Triangle():
         if None in screens:
             self.screen = screens
 
-        self.center = Vector3.new(sum(_.x for _ in self.points)/self._count,sum(_.y for _ in self.points)/self._count,sum(_.z for _ in self.points)/self._count)
+        self.extracted = [list(sublist) for sublist in self.screen]
+
+        self.center = Vector3.new(
+            sum(_.x for _ in self.points) / self._count,
+            sum(_.y for _ in self.points) / self._count,
+            sum(_.z for _ in self.points) / self._count
+        )
+        if existing_game.configuration.backface_cull:
+            p1, p2, p3 = tuple(self.points)
+            normal = (p2 - p1).cross(p3 - p1).normal
+            view_dir = (-self.center).normal
+            if normal.dot(view_dir) <= 0:
+                return
+
+        existing_game.add_triangle(self)
         centScr = self.center.screen
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
@@ -76,22 +94,29 @@ class Triangle():
         if ar < (50 / existing_game.configuration.quality):
             return
         #calculate color  
+        
         self._real_fill = fill.darker().darker().darker().darker().darker()
         if existing_game.configuration.shading and render_lights:
-            normal = self.center.normal  # polygon/triangle face normal, normalized
+            p1, p2, p3 = tuple(self.points)
+            normal = (p2 - p1).cross(p3 - p1).normal
 
             ambient = 0.25
             brightness = ambient
 
             for light in lights:
+                # Transform light position into view space for consistent lighting
+                light_pos = light.position - existing_game.camera.position
+                light_pos = light_pos.rotate(
+                    Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
+                )
                 # Direction from surface to light
-                light_dir = (light.position - self.center).normal
+                light_dir = (light_pos - self.center).normal
 
                 # Lambert diffuse
                 diffuse = max(0.0, normal.dot(light_dir))
 
                 # Optional distance falloff
-                dist = light.position.distance(self.center)
+                dist = light_pos.distance(self.center)
                 attenuation = 1.0 / (1.0 + 0.001 * dist * dist)
 
                 brightness += diffuse * light.brightness * attenuation
@@ -104,18 +129,21 @@ class Triangle():
                 int(fill.blue * brightness),
             )
 
-        
-        self.extracted = [list(sublist) for sublist in screens]
 
+
+
+    def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
         self._shape.pointList = self.extracted
         #self._shape.pointList = self.extracted
         self._shape.fill = self._real_fill
         self._shape.zindex = self.z
+        self._shape.border = None
         if existing_game.configuration.wireframe:
             self._shape.fill = None
-            self._shape.border = fill
-        existing_game.add_triangle(self)
+            self._shape.border = self.fill
+        
+
     
 
     def clip_near(self):
@@ -151,9 +179,10 @@ class Triangle():
             (b, bc, ac),
         ]
     def delete(self):
-        existing_game.polygon_factory.free(self._shape)
-        self._shape.visible = False
-        del self._shape
+        if hasattr(self, "_shape"):
+            existing_game.polygon_factory.free(self._shape)
+            self._shape.visible = False
+            del self._shape
         existing_game.remove_triangle(self)
 
     def get_bounding_box(self): 
@@ -194,3 +223,11 @@ class Triangle():
     @property
     def screen_area(self):
         return self.area(*self.extracted)
+    
+    @property
+    def physical_area(self):
+        p1, p2, p3 = tuple(self.points)
+        v1 = p2 - p1
+        v2 = p3 - p1
+        cross_product = v1.cross(v2)
+        return 0.5 * cross_product.magnitude

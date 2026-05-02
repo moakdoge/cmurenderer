@@ -25,6 +25,9 @@ app.fpsLabel = Label("FPS: 0", 370, 20)
 app.triangleLabel = Label("Triangles: 0", 360, 50)
 
 posX = 0
+pool_size = 400
+min_pool = 120
+max_pool = 1600
 
 
 
@@ -36,7 +39,7 @@ dt_ema = 1 / game.configuration.fps_target
 #i = Image("/home/moakdoge/Downloads/Pipoya RPG Tileset 32x32/LightShadow_pipo.png", 50, 50)
 #print(i._shape.__dict__)
 def onStep():
-    global MAX_AREA, dt_ema
+    global MAX_AREA, dt_ema, pool_size
     start = time.perf_counter()
     global posX
     game.tick()
@@ -60,10 +63,14 @@ def onStep():
         if posX %4 == 0 :
             if performance_ratio < (1-RANGE): # below target FPS
                 game.configuration.quality *= max(0.90, 1 - (0.985 - performance_ratio) * 0.18)
+                pool_size = max(min_pool, int(pool_size * 0.90))
             elif performance_ratio > (1+RANGE): # above target FPS
                 game.configuration.quality *= min(1.08, 1 + (performance_ratio - 1.015) * 0.12)
+                pool_size = min(max_pool, int(pool_size * 1.08))
+            game.configuration.quality = max(game.configuration.min_quality, min(4.0, game.configuration.quality))
 
-            game.configuration.quality = max(0.25, min(4.0, game.configuration.quality))
+            if pool_size != len(game.polygon_factory._pool):
+                game.polygon_factory.regen(pool_size)
 
             print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{game.configuration.fps_target}")
 
