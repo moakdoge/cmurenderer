@@ -341,39 +341,31 @@ class Triangle():
         #calculate color  
         
         self._real_fill = fill.darker().darker().darker().darker().darker()
+        normal = self.center.normal
         if existing_game.configuration.shading and render_lights:
-        
-            p1, p2, p3 = tuple(self.points)
-            normal = (p2 - p1).cross(p3 - p1).normal
-
-            ambient = 0.25
+            ambient = 0.35
             brightness = ambient
 
             for light in lights:
-                # Transform light position into view space for consistent lighting
-                light_pos = light.position - existing_game.camera.position
-                light_pos = light_pos.rotate(
-                    Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
-                )
-                # Direction from surface to light
-                light_dir = (light_pos - self.center).normal
+                if getattr(light, "directional", False):
+                    light_dir = (-light.direction).normal
+                    diffuse = max(0.0, normal.dot(light_dir))
+                    brightness += diffuse * light.brightness
+                else:
+                    light_pos = light.position - existing_game.camera.position
+                    light_pos = light_pos.rotate(
+                        Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
+                    )
 
-                # Lambert diffuse
-                diffuse = max(0.0, normal.dot(light_dir))
+                    light_dir = (light_pos - self.center).normal
+                    diffuse = max(0.0, normal.dot(light_dir))
 
-                # Optional distance falloff
-                dist = light_pos.distance(self.center)
-                attenuation = 1.0 / (1.0 + 0.00001 * dist * dist)
+                    dist = light_pos.distance(self.center)
+                    attenuation = 1.0 / (1.0 + 0.00001 * dist * dist)
 
-                brightness += diffuse * light.brightness * attenuation
+                    brightness += diffuse * light.brightness * attenuation
 
-            brightness = min(1.0, brightness)
-
-            self._real_fill = rgb(
-                int(fill.red * brightness),
-                int(fill.green * brightness),
-                int(fill.blue * brightness),
-            )
+            brightness = max(0.0, min(1.0, brightness))
 
 
 
@@ -610,7 +602,7 @@ class Game():
         zbuffer_scale: int = 6 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
-        shading: bool = True
+        shading: bool = False
         quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
@@ -929,7 +921,7 @@ class Cube(Base3DShape):
                     light_dir = (light.position - center).normal
                     diffuse = max(0.0, normal.dot(light_dir))
                     dist = light.position.distance(center)
-                    attenuation = 1.0 / (1.0 + 0.00025 * dist * dist)
+                    attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
                     brightness += diffuse * light.brightness * attenuation
             else:
                 brightness = 1.0
@@ -941,8 +933,8 @@ class Cube(Base3DShape):
                 int(self.fill.blue * brightness),
             )
 
-            Triangle(self.position, v1, v2, v3, fill=face_fill, render_lights=True)
-            Triangle(self.position, v1, v3, v4, fill=face_fill, render_lights=True)
+            Triangle(self.position, v1, v2, v3, fill=face_fill, render_lights=False)
+            Triangle(self.position, v1, v3, v4, fill=face_fill, render_lights=False)
 
 
 # ===== engine/shapes/sphere.py =====

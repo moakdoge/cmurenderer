@@ -61,7 +61,7 @@ class Cube(Base3DShape):
                     light_dir = (light.position - center).normal
                     diffuse = max(0.0, normal.dot(light_dir))
                     dist = light.position.distance(center)
-                    attenuation = 1.0 / (1.0 + 0.00025 * dist * dist)
+                    attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
                     brightness += diffuse * light.brightness * attenuation
             else:
                 brightness = 1.0
