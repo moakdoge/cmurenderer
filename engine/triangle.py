@@ -26,8 +26,41 @@ class Triangle():
         self._count = len(points)
         self._real_fill= fill
         self.fogged = False
+        self.center = Vector3.new(
+            sum(_.x for _ in self.points) / self._count,
+            sum(_.y for _ in self.points) / self._count,
+            sum(_.z for _ in self.points) / self._count
+        )
+        world_points = [
+            p + position
+            for p in self.points
+        ]
 
+        world_center = Vector3.new(
+            sum(p.x for p in world_points) / len(world_points),
+            sum(p.y for p in world_points) / len(world_points),
+            sum(p.z for p in world_points) / len(world_points),
+        )
+        if render_lights:
+            self._real_fill = fill.darker().darker().darker().darker().darker()
+            normal = world_center.normal
+            if render_lights and existing_game.configuration.shading:
+                ambient = 0.35
+                brightness = ambient
 
+                for light in lights:
+                    ds = world_center.distance(light.position) / light.brightness
+                    if ds > 400:
+                        continue
+                    brightness = max(brightness, 1 - ds / 400)
+
+                brightness = max(0.0, min(1.0, brightness))
+
+                self._real_fill = rgb(
+                    min(255, self._real_fill.red * brightness),
+                    min(255, self._real_fill.green * brightness),
+                    min(255, self._real_fill.blue * brightness)
+                )
         if not pretransformed:
             # calculate camera offset and rotate into view space
             for i, p in enumerate(self.points):
@@ -45,10 +78,10 @@ class Triangle():
             Triangle(
                 Vector3.zero(),
                 *second,
-                fill=fill,
+                fill=self._real_fill,
                 texture=texture,
                 pretransformed=True,
-                render_lights=render_lights,
+                render_lights=False,
                 skip_near_clip=True
             )
 
@@ -78,15 +111,9 @@ class Triangle():
         if (self.screen_area < lowest):
             return
         
-        if (self.screen_area > lowest and self.screen_area < lowest * 1.25):
-            fill = fill.darker().darker().darker()
-            self.fogged = True
 
-        self.center = Vector3.new(
-            sum(_.x for _ in self.points) / self._count,
-            sum(_.y for _ in self.points) / self._count,
-            sum(_.z for _ in self.points) / self._count
-        )
+
+
         if existing_game.configuration.backface_cull:
             p1, p2, p3 = tuple(self.points)
             normal = (p2 - p1).cross(p3 - p1).normal
@@ -103,24 +130,6 @@ class Triangle():
             return
         #calculate color  
         
-        self._real_fill = fill.darker().darker().darker().darker().darker()
-        normal = self.center.normal
-        if existing_game.configuration.shading:
-            ambient = 0.35
-            brightness = ambient
-
-            for light in lights:
-                ds = self.center.distance(light.position) / light.brightness
-                if ds > 400:
-                    continue
-                brightness = ds / 100
-                #print(brightness)
-            brightness = max(0.0, min(1.0, brightness))
-            self._real_fill = rgb(
-                min(255,self._real_fill._red * brightness),
-                min(255,self._real_fill._green * brightness),
-                min(255,self._real_fill._blue * brightness)
-            )
 
 
 
@@ -136,15 +145,10 @@ class Triangle():
                 self._shape.zindex = self.z
         except Exception as e:    
             self._shape.zindex = self.z
+        self._shape.border = self._real_fill
         if existing_game.configuration.wireframe:
             self._shape.fill = None
-            self._shape.border = self.fill
-        else:
-            self._shape.border = None
-        if self.fogged:
-            self._shape.opacity = 50
-        else:
-            self._shape.opacity = 100
+       
         self._shape.visible = True
 
     

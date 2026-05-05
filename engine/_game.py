@@ -25,11 +25,11 @@ class Game():
         debug: bool = True
         backface_cull: bool = False
         zbuffer: bool = True
-        zbuffer_scale: int = 6 if utils.is_desktop() else 18
+        zbuffer_scale: int = 4 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
         shading: bool = True
-        quality: float = 0.4  #increase for worse quality
+        quality: float = 0.8  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
@@ -66,8 +66,15 @@ class Game():
         self._main_function = func
         return func
 
+    def warning(self):
+        lines = [
+            '''WARNING! You are on CMU Web!''',
+            "",
+            "Performance is much, much worse then on the desktop version and some features may be unsupported!"
+        ]
+        print("\n".join(lines))
 
-    @utils.make_global
+    @utils.make_global(web=False)
     def onMouseMove(self, x, y):
         if self.utils.locked_mouse:
             import pygame
@@ -76,7 +83,7 @@ class Game():
             self.camera.yaw += rx * app.dt * -1
             self.camera.pitch += ry * app.dt * -1
         
-    @utils.make_global
+    @utils.make_global()
     def onKeyHold(self,keys):
         
         #movmement
@@ -104,7 +111,7 @@ class Game():
             if "space" == key:
                 self.player.jump()
 
-    @utils.make_global
+    @utils.make_global()
     def onKeyPress(self, key: str):
         ### DEBUG ###
         if not self.configuration.debug:
@@ -118,7 +125,7 @@ class Game():
             
         if "x" == key:
             self.utils.lock_mouse()
-    @utils.make_global
+    @utils.make_global()
     def onStep(self):
         _dt = time.perf_counter() - self._last_dt
         self._last_dt = time.perf_counter()
@@ -265,3 +272,5 @@ class Game():
         if self._main_function is not None:
             self._main_function()
         self.utils.run()
+        if self.utils.is_web():
+            self.warning()

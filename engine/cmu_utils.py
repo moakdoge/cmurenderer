@@ -40,28 +40,34 @@ class CMUtils():
 
         
         
+    def make_global(self, name=None, desktop: bool = True, web: bool = True):
+        def decorator(func):
+            def wrapper(*args, **kwargs):
+                return CMUtils._game.__class__.__dict__[func.__name__](
+                    CMUtils._game,
+                    *args,
+                    **kwargs
+                )
 
-    def make_global(self, obj, name=None, desktop: bool = True, web: bool = True):
-        def wrapper(*args, **kwargs):
-            return CMUtils._game.__class__.__dict__[obj.__name__](
-                CMUtils._game,
-                *args,
-                **kwargs
-            )
-        if not desktop and self.is_desktop():
-            return obj
-        if not web and self.is_web():
-            return obj
-        self._globals[name or obj.__name__] = wrapper
-        return obj
+            if not desktop and self.is_desktop():
+                return func
+            if not web and self.is_web():
+                return func
+            
+            self._globals[name or func.__name__] = wrapper
+            return func
+
+        return decorator
+    
+    
 
     @staticmethod
     def is_web() -> Literal[False]:
-        return (sys.implementation.name == "brython") # type: ignore
+        return (sys.implementation.name == "brython")  or "__BRYTHON__" in globals() # type: ignore
 
     @staticmethod
     def is_desktop() -> Literal[True]:
-        return (sys.implementation.name == "cpython") # pyright: ignore[reportReturnType]
+        return (sys.implementation.name == "cpython")# pyright: ignore[reportReturnType]
     
     def run(self):
         if self.is_desktop():

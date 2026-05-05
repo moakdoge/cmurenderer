@@ -22,7 +22,6 @@ exCube: Cube
 
 @game.on_ready
 def main():
-    print(game.utils.version)
     global exCube
     app.fpsLabel = Label("FPS: 0", 370, 20)
     app.triangleLabel = Label("Triangles: 0", 360, 50)
@@ -31,13 +30,6 @@ def main():
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
 
-
-def onMousePress(x, y):
-    r = Ray(game.camera.position, game.camera.direction)
-    hit = r.cast()
-    if hit is None:
-        return
-    print(hit)
 
 @game.register_tick
 def step(dt):

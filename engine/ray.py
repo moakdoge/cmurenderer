@@ -1,6 +1,6 @@
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
-
+from engine import game
 class Ray:
     __slots__ = ("position", "direction", "distance")
     def __init__(self, position: "Vector3", direction: "Vector3", distance: "float" = float("inf")) -> None:
@@ -44,8 +44,8 @@ class Ray:
 
         return t
     
-    def cast(self) -> Triangle | None:
-        from engine import game
+    def cast(self) -> Triangle | None: 
+
         for tri in game.triangles:
             if self.intersects(tri):
                 return tri

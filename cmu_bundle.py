@@ -292,8 +292,41 @@ class Triangle():
         self._count = len(points)
         self._real_fill= fill
         self.fogged = False
+        self.center = Vector3.new(
+            sum(_.x for _ in self.points) / self._count,
+            sum(_.y for _ in self.points) / self._count,
+            sum(_.z for _ in self.points) / self._count
+        )
+        world_points = [
+            p + position
+            for p in self.points
+        ]
 
+        world_center = Vector3.new(
+            sum(p.x for p in world_points) / len(world_points),
+            sum(p.y for p in world_points) / len(world_points),
+            sum(p.z for p in world_points) / len(world_points),
+        )
+        if render_lights:
+            self._real_fill = fill.darker().darker().darker().darker().darker()
+            normal = world_center.normal
+            if render_lights and existing_game.configuration.shading:
+                ambient = 0.35
+                brightness = ambient
 
+                for light in lights:
+                    ds = world_center.distance(light.position) / light.brightness
+                    if ds > 400:
+                        continue
+                    brightness = max(brightness, 1 - ds / 400)
+
+                brightness = max(0.0, min(1.0, brightness))
+
+                self._real_fill = rgb(
+                    min(255, self._real_fill.red * brightness),
+                    min(255, self._real_fill.green * brightness),
+                    min(255, self._real_fill.blue * brightness)
+                )
         if not pretransformed:
             # calculate camera offset and rotate into view space
             for i, p in enumerate(self.points):
@@ -311,10 +344,10 @@ class Triangle():
             Triangle(
                 Vector3.zero(),
                 *second,
-                fill=fill,
+                fill=self._real_fill,
                 texture=texture,
                 pretransformed=True,
-                render_lights=render_lights,
+                render_lights=False,
                 skip_near_clip=True
             )
 
@@ -344,15 +377,9 @@ class Triangle():
         if (self.screen_area < lowest):
             return
         
-        if (self.screen_area > lowest and self.screen_area < lowest * 1.25):
-            fill = fill.darker().darker().darker()
-            self.fogged = True
 
-        self.center = Vector3.new(
-            sum(_.x for _ in self.points) / self._count,
-            sum(_.y for _ in self.points) / self._count,
-            sum(_.z for _ in self.points) / self._count
-        )
+
+
         if existing_game.configuration.backface_cull:
             p1, p2, p3 = tuple(self.points)
             normal = (p2 - p1).cross(p3 - p1).normal
@@ -369,24 +396,6 @@ class Triangle():
             return
         #calculate color  
         
-        self._real_fill = fill.darker().darker().darker().darker().darker()
-        normal = self.center.normal
-        if existing_game.configuration.shading:
-            ambient = 0.35
-            brightness = ambient
-
-            for light in lights:
-                ds = self.center.distance(light.position) / light.brightness
-                if ds > 400:
-                    continue
-                brightness = ds / 100
-                #print(brightness)
-            brightness = max(0.0, min(1.0, brightness))
-            self._real_fill = rgb(
-                min(255,self._real_fill._red * brightness),
-                min(255,self._real_fill._green * brightness),
-                min(255,self._real_fill._blue * brightness)
-            )
 
 
 
@@ -402,15 +411,10 @@ class Triangle():
                 self._shape.zindex = self.z
         except Exception as e:    
             self._shape.zindex = self.z
+        self._shape.border = self._real_fill
         if existing_game.configuration.wireframe:
             self._shape.fill = None
-            self._shape.border = self.fill
-        else:
-            self._shape.border = None
-        if self.fogged:
-            self._shape.opacity = 50
-        else:
-            self._shape.opacity = 100
+       
         self._shape.visible = True
 
     
@@ -531,33 +535,49 @@ class CMUtils():
     
     @property
     def version(self):
+        '''Unsupported on CMU; just returns the most recent'''
         if self.is_desktop():
             from cmu_graphics import cmu_graphics
-            return cmu_graphics.get_update_info()
-        
-        
+            import os
+            current_directory = os.path.dirname(os.path.realpath(cmu_graphics.__file__)) # type: ignore
+            with open(os.path.join(current_directory, 'meta', 'version.txt')) as f:
+                version = f.read().strip()
+                return version
+        else:
+            with open('https://s3.amazonaws.com/cmu-cs-academy.lib.prod/desktop-cmu-graphics/version.txt', "r") as f:
+                return f.read()
 
-    def make_global(self, obj, name=None, desktop: bool = True, web: bool = True):
-        def wrapper(*args, **kwargs):
-            return CMUtils._game.__class__.__dict__[obj.__name__](
-                CMUtils._game,
-                *args,
-                **kwargs
-            )
-        if not desktop and self.is_desktop():
-            return obj
-        if not web and self.is_web():
-            return obj
-        self._globals[name or obj.__name__] = wrapper
-        return obj
+
+        
+        
+    def make_global(self, name=None, desktop: bool = True, web: bool = True):
+        def decorator(func):
+            def wrapper(*args, **kwargs):
+                return CMUtils._game.__class__.__dict__[func.__name__](
+                    CMUtils._game,
+                    *args,
+                    **kwargs
+                )
+
+            if not desktop and self.is_desktop():
+                return func
+            if not web and self.is_web():
+                return func
+            
+            self._globals[name or func.__name__] = wrapper
+            return func
+
+        return decorator
+    
+    
 
     @staticmethod
     def is_web() -> Literal[False]:
-        return (sys.implementation.name == "brython") # type: ignore
+        return (sys.implementation.name == "brython")  or "__BRYTHON__" in globals() # type: ignore
 
     @staticmethod
     def is_desktop() -> Literal[True]:
-        return (sys.implementation.name == "cpython") # pyright: ignore[reportReturnType]
+        return (sys.implementation.name == "cpython")# pyright: ignore[reportReturnType]
     
     def run(self):
         if self.is_desktop():
@@ -654,11 +674,11 @@ class Game():
         debug: bool = True
         backface_cull: bool = False
         zbuffer: bool = True
-        zbuffer_scale: int = 6 if utils.is_desktop() else 18
+        zbuffer_scale: int = 4 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
         shading: bool = True
-        quality: float = 0.4  #increase for worse quality
+        quality: float = 0.8  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
@@ -695,8 +715,15 @@ class Game():
         self._main_function = func
         return func
 
+    def warning(self):
+        lines = [
+            '''WARNING! You are on CMU Web!''',
+            "",
+            "Performance is much, much worse then on the desktop version and some features may be unsupported!"
+        ]
+        print("\n".join(lines))
 
-    @utils.make_global
+    @utils.make_global(web=False)
     def onMouseMove(self, x, y):
         if self.utils.locked_mouse:
             import pygame
@@ -705,7 +732,7 @@ class Game():
             self.camera.yaw += rx * app.dt * -1
             self.camera.pitch += ry * app.dt * -1
         
-    @utils.make_global
+    @utils.make_global()
     def onKeyHold(self,keys):
         
         #movmement
@@ -733,7 +760,7 @@ class Game():
             if "space" == key:
                 self.player.jump()
 
-    @utils.make_global
+    @utils.make_global()
     def onKeyPress(self, key: str):
         ### DEBUG ###
         if not self.configuration.debug:
@@ -747,7 +774,7 @@ class Game():
             
         if "x" == key:
             self.utils.lock_mouse()
-    @utils.make_global
+    @utils.make_global()
     def onStep(self):
         _dt = time.perf_counter() - self._last_dt
         self._last_dt = time.perf_counter()
@@ -894,6 +921,8 @@ class Game():
         if self._main_function is not None:
             self._main_function()
         self.utils.run()
+        if self.utils.is_web():
+            self.warning()
 
 
 # ===== engine/__init__.py =====
@@ -1000,13 +1029,13 @@ class Cube(Base3DShape):
                 int(self.fill.green * brightness),
                 int(self.fill.blue * brightness),
             )
+            print(self.fill)
 
-            Triangle(self.position, v1, v2, v3, fill=self.fill, render_lights=False)
-            Triangle(self.position, v1, v3, v4, fill=self.fill, render_lights=False)
+            Triangle(self.position, v1, v2, v3, fill=self.fill)
+            Triangle(self.position, v1, v3, v4, fill=self.fill)
 
 
 # ===== engine/ray.py =====
-
 
 class Ray:
     __slots__ = ("position", "direction", "distance")
@@ -1051,8 +1080,8 @@ class Ray:
 
         return t
     
-    def cast(self) -> Triangle | None:
-        from engine import game
+    def cast(self) -> Triangle | None: 
+
         for tri in game.triangles:
             if self.intersects(tri):
                 return tri
@@ -1128,7 +1157,6 @@ exCube: Cube
 
 @game.on_ready
 def main():
-    print(game.utils.version)
     global exCube
     app.fpsLabel = Label("FPS: 0", 370, 20)
     app.triangleLabel = Label("Triangles: 0", 360, 50)
@@ -1137,13 +1165,6 @@ def main():
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
 
-
-def onMousePress(x, y):
-    r = Ray(game.camera.position, game.camera.direction)
-    hit = r.cast()
-    if hit is None:
-        return
-    print(hit)
 
 @game.register_tick
 def step(dt):
