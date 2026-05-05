@@ -15,7 +15,7 @@ class Camera():
         pass
     def tick(self):
         self.light.position = self.position
-        self.light.direction = Vector3.new(0, 0, self.yaw)
+        self.light.direction = Vector3.new(self.pitch, 0, self.yaw)
     @property
     def direction(self):
         return Vector3(

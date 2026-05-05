@@ -28,7 +28,7 @@ class Game():
         zbuffer_scale: int = 6 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
-        shading: bool = True
+        shading: bool = False
         quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
@@ -47,7 +47,7 @@ class Game():
         self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
-        self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
+        #self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1)
         self._last_dt = time.perf_counter()
         self._events: dict[str, list] = {}
         self._main_function: Callable | None = None
@@ -240,7 +240,6 @@ class Game():
         return visible
 
     def tick(self):
-
         self.clear_screen()
         self.camera.tick()
         for shape in self._shapes:

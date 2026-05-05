@@ -73,5 +73,5 @@ class Cube(Base3DShape):
                 int(self.fill.blue * brightness),
             )
 
-            Triangle(self.position, v1, v2, v3, fill=self.fill, render_lights=False)
-            Triangle(self.position, v1, v3, v4, fill=self.fill, render_lights=False)
+            Triangle(self.position, v1, v2, v3, fill=face_fill, render_lights=False)
+            Triangle(self.position, v1, v3, v4, fill=face_fill, render_lights=False)

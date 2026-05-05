@@ -179,7 +179,7 @@ class Camera():
         pass
     def tick(self):
         self.light.position = self.position
-        self.light.direction = Vector3.new(0, 0, self.yaw)
+        self.light.direction = Vector3.new(self.pitch, 0, self.yaw)
     @property
     def direction(self):
         return Vector3(
@@ -342,6 +342,7 @@ class Triangle():
         
         self._real_fill = fill.darker().darker().darker().darker().darker()
         if existing_game.configuration.shading and render_lights:
+        
             p1, p2, p3 = tuple(self.points)
             normal = (p2 - p1).cross(p3 - p1).normal
 
@@ -362,7 +363,7 @@ class Triangle():
 
                 # Optional distance falloff
                 dist = light_pos.distance(self.center)
-                attenuation = 1.0 / (1.0 + 0.001 * dist * dist)
+                attenuation = 1.0 / (1.0 + 0.00001 * dist * dist)
 
                 brightness += diffuse * light.brightness * attenuation
 
@@ -628,7 +629,7 @@ class Game():
         self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
-        self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
+        #self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1)
         self._last_dt = time.perf_counter()
         self._events: dict[str, list] = {}
         self._main_function: Callable | None = None
@@ -647,33 +648,38 @@ class Game():
         self._main_function = func
         return func
 
+
+    
     @utils.make_global
-    def onKeyHold(self, key):
+    def onKeyHold(self,keys):
+        
+        #movmement
         forward = self.camera.direction
         forward.x *= -1
         forward.y = 0
         right = Vector3(forward.z, 0, -forward.x).normal
         speed = 60
-        if "w" in key: self.player.velocity += forward * speed * 1
-        if "s" in key: self.player.velocity += forward * speed * -1
-        if "a" in key: self.player.velocity += right * speed * -1
-        if "d" in key: self.player.velocity += right * speed * 1
-    
-    @utils.make_global
-    def onKeyPress(self,key):
-        speed=math.radians(30)
-        #camera
-
-        if "up" == key: self.camera.pitch += speed
-        if "down" == key: self.camera.pitch -= speed
-        if "right"== key: self.camera.yaw -= speed
-        if "left" == key: self.camera.yaw += speed
+        if "w" in keys: self.player.velocity += forward * speed * 1
+        if "s" in keys: self.player.velocity += forward * speed * -1
+        if "a" in keys: self.player.velocity += right * speed * -1
+        if "d" in keys: self.player.velocity += right * speed * 1
         
+        
+        #camera
+        speed=math.radians(60)*2
+        for key in keys:
+            if "up" == key: self.camera.pitch += speed * app.dt
+            if "down" == key: self.camera.pitch -= speed* app.dt
+            if "right"== key: self.camera.yaw -= speed* app.dt
+            if "left" == key: self.camera.yaw += speed* app.dt
+            
 
 
-        if "space" == key:
-            self.player.jump()
+            if "space" == key:
+                self.player.jump()
 
+    @utils.make_global
+    def onKeyPress(self, key: str):
         ### DEBUG ###
         if not self.configuration.debug:
             return
@@ -816,7 +822,6 @@ class Game():
         return visible
 
     def tick(self):
-
         self.clear_screen()
         self.camera.tick()
         for shape in self._shapes:
@@ -826,9 +831,9 @@ class Game():
         self.zlayer_screen()
 
     def run(self):
-        self.utils.run()
         if self._main_function is not None:
             self._main_function()
+        self.utils.run()
 
 
 # ===== engine/__init__.py =====
@@ -936,8 +941,8 @@ class Cube(Base3DShape):
                 int(self.fill.blue * brightness),
             )
 
-            Triangle(self.position, v1, v2, v3, fill=self.fill, render_lights=False)
-            Triangle(self.position, v1, v3, v4, fill=self.fill, render_lights=False)
+            Triangle(self.position, v1, v2, v3, fill=face_fill, render_lights=True)
+            Triangle(self.position, v1, v3, v4, fill=face_fill, render_lights=True)
 
 
 # ===== engine/shapes/sphere.py =====
@@ -1004,16 +1009,17 @@ app.stepsPerSecond = 120
 
 
 
-
+exCube: Cube
 
 @game.on_ready
 def main():
+    global exCube
     app.fpsLabel = Label("FPS: 0", 370, 20)
     app.triangleLabel = Label("Triangles: 0", 360, 50)
 
-    sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
-    cube1 = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
-
+    #sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
+    floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
+    exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
 
 
 @game.register_tick
@@ -1023,6 +1029,7 @@ def step(dt):
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
+    exCube.rotation += Vector3.new(0.025,0.025,0.025)
 
 
 game.run()

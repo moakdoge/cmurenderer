@@ -104,38 +104,31 @@ class Triangle():
         #calculate color  
         
         self._real_fill = fill.darker().darker().darker().darker().darker()
+        normal = self.center.normal
         if existing_game.configuration.shading and render_lights:
-            p1, p2, p3 = tuple(self.points)
-            normal = (p2 - p1).cross(p3 - p1).normal
-
-            ambient = 0.25
+            ambient = 0.35
             brightness = ambient
 
             for light in lights:
-                # Transform light position into view space for consistent lighting
-                light_pos = light.position - existing_game.camera.position
-                light_pos = light_pos.rotate(
-                    Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
-                )
-                # Direction from surface to light
-                light_dir = (light_pos - self.center).normal
+                if getattr(light, "directional", False):
+                    light_dir = (-light.direction).normal
+                    diffuse = max(0.0, normal.dot(light_dir))
+                    brightness += diffuse * light.brightness
+                else:
+                    light_pos = light.position - existing_game.camera.position
+                    light_pos = light_pos.rotate(
+                        Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
+                    )
 
-                # Lambert diffuse
-                diffuse = max(0.0, normal.dot(light_dir))
+                    light_dir = (light_pos - self.center).normal
+                    diffuse = max(0.0, normal.dot(light_dir))
 
-                # Optional distance falloff
-                dist = light_pos.distance(self.center)
-                attenuation = 1.0 / (1.0 + 0.001 * dist * dist)
+                    dist = light_pos.distance(self.center)
+                    attenuation = 1.0 / (1.0 + 0.00001 * dist * dist)
 
-                brightness += diffuse * light.brightness * attenuation
+                    brightness += diffuse * light.brightness * attenuation
 
-            brightness = min(1.0, brightness)
-
-            self._real_fill = rgb(
-                int(fill.red * brightness),
-                int(fill.green * brightness),
-                int(fill.blue * brightness),
-            )
+            brightness = max(0.0, min(1.0, brightness))
 
 
 
