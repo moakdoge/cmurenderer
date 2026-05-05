@@ -1,6 +1,6 @@
 import math
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from cmu_graphics import *
 
@@ -25,14 +25,13 @@ class Game():
         debug: bool = True
         backface_cull: bool = False
         zbuffer: bool = True
-        zbuffer_scale: int = 6
+        zbuffer_scale: int = 6 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
         shading: bool = True
         quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
-        enable_auto_quality: bool = True
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
 
     def __init__(self):
@@ -51,6 +50,8 @@ class Game():
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
         self._last_dt = time.perf_counter()
         self._events: dict[str, list] = {}
+        self._main_function: Callable | None = None
+        self.frames = 0
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -60,34 +61,43 @@ class Game():
             self._events["tick"] = []
         self._events["tick"].append(func)
         return func
+    
+    def on_ready(self, func: Callable):
+        self._main_function = func
+        return func
 
+
+    
     @utils.make_global
-    def onKeyHold(self, key):
+    def onKeyHold(self,keys):
+        
+        #movmement
         forward = self.camera.direction
         forward.x *= -1
         forward.y = 0
         right = Vector3(forward.z, 0, -forward.x).normal
         speed = 60
-        if "w" in key: self.player.velocity += forward * speed * 1
-        if "s" in key: self.player.velocity += forward * speed * -1
-        if "a" in key: self.player.velocity += right * speed * -1
-        if "d" in key: self.player.velocity += right * speed * 1
-    
-    @utils.make_global
-    def onKeyPress(self,key):
-        speed=math.radians(30)
-        #camera
-
-        if "up" == key: self.camera.pitch += speed
-        if "down" == key: self.camera.pitch -= speed
-        if "right"== key: self.camera.yaw -= speed
-        if "left" == key: self.camera.yaw += speed
+        if "w" in keys: self.player.velocity += forward * speed * 1
+        if "s" in keys: self.player.velocity += forward * speed * -1
+        if "a" in keys: self.player.velocity += right * speed * -1
+        if "d" in keys: self.player.velocity += right * speed * 1
         
+        
+        #camera
+        speed=math.radians(60)*2
+        for key in keys:
+            if "up" == key: self.camera.pitch += speed * app.dt
+            if "down" == key: self.camera.pitch -= speed* app.dt
+            if "right"== key: self.camera.yaw -= speed* app.dt
+            if "left" == key: self.camera.yaw += speed* app.dt
+            
 
 
-        if "space" == key:
-            self.player.jump()
+            if "space" == key:
+                self.player.jump()
 
+    @utils.make_global
+    def onKeyPress(self, key: str):
         ### DEBUG ###
         if not self.configuration.debug:
             return
@@ -104,6 +114,7 @@ class Game():
         app.dt = _dt
         for fn in self._events.get("tick", []):
             fn(_dt)
+        self.frames += 1
         pass
         
     def add_triangle(self, triangle):
@@ -237,3 +248,8 @@ class Game():
         self.render_triangles()
         self.player.update()
         self.zlayer_screen()
+
+    def run(self):
+        if self._main_function is not None:
+            self._main_function()
+        self.utils.run()

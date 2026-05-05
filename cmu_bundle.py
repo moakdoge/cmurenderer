@@ -262,6 +262,7 @@ class Triangle():
         self.fill = fill
         self._count = len(points)
         self._real_fill= fill
+        self.fogged = False
 
 
         if not pretransformed:
@@ -310,6 +311,13 @@ class Triangle():
             self.screen = screens
 
         self.extracted = [list(sublist) for sublist in self.screen]
+        lowest = 140 * existing_game.configuration.fog
+        if (self.screen_area < lowest):
+            return
+        
+        if (self.screen_area > lowest and self.screen_area < lowest * 1.25):
+            fill = fill.darker().darker().darker()
+            self.fogged = True
 
         self.center = Vector3.new(
             sum(_.x for _ in self.points) / self._count,
@@ -386,6 +394,10 @@ class Triangle():
             self._shape.border = self.fill
         else:
             self._shape.border = None
+        if self.fogged:
+            self._shape.opacity = 50
+        else:
+            self._shape.opacity = 100
         self._shape.visible = True
 
     
@@ -576,7 +588,7 @@ class PolygonFactory:
 
 import math
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from cmu_graphics import *
 
@@ -594,13 +606,13 @@ class Game():
         debug: bool = True
         backface_cull: bool = False
         zbuffer: bool = True
-        zbuffer_scale: int = 6
+        zbuffer_scale: int = 6 if utils.is_desktop() else 18
+        fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
         shading: bool = True
         quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
-        enable_auto_quality: bool = True
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
 
     def __init__(self):
@@ -619,6 +631,8 @@ class Game():
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
         self._last_dt = time.perf_counter()
         self._events: dict[str, list] = {}
+        self._main_function: Callable | None = None
+        self.frames = 0
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
@@ -627,6 +641,10 @@ class Game():
         if not "tick" in self._events:
             self._events["tick"] = []
         self._events["tick"].append(func)
+        return func
+    
+    def on_ready(self, func: Callable):
+        self._main_function = func
         return func
 
     @utils.make_global
@@ -672,6 +690,7 @@ class Game():
         app.dt = _dt
         for fn in self._events.get("tick", []):
             fn(_dt)
+        self.frames += 1
         pass
         
     def add_triangle(self, triangle):
@@ -719,7 +738,7 @@ class Game():
             self.triangles,
             reverse=True,
             key = lambda tri: tri.physical_area * tri.screen_area
-        )[0:math.floor(self.configuration.quality*(len(self.triangles)-1))]
+        )#[0:math.floor(self.configuration.quality*2*(len(self.triangles)-1))]
 
 
         if utils.is_desktop():
@@ -805,6 +824,11 @@ class Game():
         self.render_triangles()
         self.player.update()
         self.zlayer_screen()
+
+    def run(self):
+        self.utils.run()
+        if self._main_function is not None:
+            self._main_function()
 
 
 # ===== engine/__init__.py =====
@@ -982,31 +1006,18 @@ app.stepsPerSecond = 120
 
 
 
+@game.on_ready
+def main():
+    app.fpsLabel = Label("FPS: 0", 370, 20)
+    app.triangleLabel = Label("Triangles: 0", 360, 50)
+
+    sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
+    cube1 = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
 
 
-app.dt = 0.016
-app.fpsLabel = Label("FPS: 0", 370, 20)
-app.triangleLabel = Label("Triangles: 0", 360, 50)
-
-posX = 0
-pool_size = 400
-min_pool = 120
-max_pool = 1600
-
-
-
-sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
-cube1 = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
-
-fps_trend: list[float] = []
-dt_ema = 1 / game.configuration.fps_target
-#i = Image("/home/moakdoge/Downloads/Pipoya RPG Tileset 32x32/LightShadow_pipo.png", 50, 50)
-#print(i._shape.__dict__)
 
 @game.register_tick
 def step(dt):
-    MAX_AREA = 180 / (game.configuration.quality*2)
-
     #print(MAX_AREA, min(fps_trend))
     app.fpsLabel.value = f"FPS: {rounded(1/dt)}"
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
@@ -1014,4 +1025,4 @@ def step(dt):
     app.triangleLabel.toFront()
 
 
-game.utils.run()
+game.run()
