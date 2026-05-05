@@ -49,6 +49,12 @@ class Vector3():
                 self.y * other,
                 self.z * other
             )
+        else:
+            return Vector3(
+                self.x * other.x,
+                self.y * other.y,
+                self.z * other.z
+            )
         raise TypeError("Can only multiply Vector3 by scalar")
     def __add__(self, other: "Vector3") -> "Vector3":
         if isinstance(other, Vector3):
@@ -64,6 +70,29 @@ class Vector3():
                 self.y - other.y,
                 self.z - other.z
             )
+            
+    def __iadd__(self, other: "Vector3"):
+        self.x += other.x
+        self.y += other.y
+        self.z += other.z
+        return self
+    
+    def __isub__(self, other: "Vector3"):
+        self.x -= other.x
+        self.y -= other.y
+        self.z -= other.z
+        return self
+    
+    def __imult__(self, other: "Vector3 | float | int"):
+        if isinstance(other, Vector3):
+            self.x *= other.x
+            self.y *= other.y
+            self.z *= other.z
+        else:
+            self.x *= other
+            self.y *= other
+            self.z *= other
+        return self
         
     def __repr__(self) -> str:
         return f"({math.ceil(self.x)}, {math.ceil(self.y)}, {math.ceil(self.z)})"

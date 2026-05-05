@@ -67,7 +67,15 @@ class Game():
         return func
 
 
-    
+    @utils.make_global
+    def onMouseMove(self, x, y):
+        if self.utils.locked_mouse:
+            import pygame
+            pygame.event.pump()
+            rx, ry = pygame.mouse.get_rel()
+            self.camera.yaw += rx * app.dt * -1
+            self.camera.pitch += ry * app.dt * -1
+        
     @utils.make_global
     def onKeyHold(self,keys):
         
@@ -105,6 +113,11 @@ class Game():
         if "q" == key:
             self.configuration.wireframe = not self.configuration.wireframe
 
+        if "z" == key:
+            self.utils.unlock_mouse()
+            
+        if "x" == key:
+            self.utils.lock_mouse()
     @utils.make_global
     def onStep(self):
         _dt = time.perf_counter() - self._last_dt

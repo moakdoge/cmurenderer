@@ -70,6 +70,29 @@ class Vector3():
                 self.y - other.y,
                 self.z - other.z
             )
+            
+    def __iadd__(self, other: "Vector3"):
+        self.x += other.x
+        self.y += other.y
+        self.z += other.z
+        return self
+    
+    def __isub__(self, other: "Vector3"):
+        self.x -= other.x
+        self.y -= other.y
+        self.z -= other.z
+        return self
+    
+    def __imult__(self, other: "Vector3 | float | int"):
+        if isinstance(other, Vector3):
+            self.x *= other.x
+            self.y *= other.y
+            self.z *= other.z
+        else:
+            self.x *= other
+            self.y *= other
+            self.z *= other
+        return self
         
     def __repr__(self) -> str:
         return f"({math.ceil(self.x)}, {math.ceil(self.y)}, {math.ceil(self.z)})"
@@ -937,6 +960,60 @@ class Cube(Base3DShape):
             Triangle(self.position, v1, v3, v4, fill=face_fill, render_lights=False)
 
 
+# ===== engine/ray.py =====
+
+
+class Ray:
+    __slots__ = ("position", "direction", "distance")
+    def __init__(self, position: "Vector3", direction: "Vector3", distance: "float" = float("inf")) -> None:
+        self.position = position
+        self.direction = direction.normal
+        self.distance = distance
+        
+    def intersects(self, tri: Triangle) -> Triangle | None:
+        EPS = 1e-6
+
+        p1, p2, p3 = tri.points
+        edge1 = p2 - p1
+        edge2 = p3 - p1
+
+        h = self.direction.cross(edge2)
+        a = edge1.dot(h)
+
+        if -EPS < a < EPS:
+            return None
+
+        f = 1.0 / a
+        s = self.position - p1
+        u = f * s.dot(h)
+
+        if u < 0.0 or u > 1.0:
+            return None
+
+        q = s.cross(edge1)
+        v = f * self.direction.dot(q)
+
+        if v < 0.0 or u + v > 1.0:
+            return None
+
+        t = f * edge2.dot(q)
+
+        if t <= EPS:
+            return None
+        
+        if t >= self.distance:
+            return None
+
+        return t
+    
+    def cast(self) -> Triangle | None:
+        from engine import game
+        for tri in game.triangles:
+            if self.intersects(tri):
+                return tri
+        return None
+
+
 # ===== engine/shapes/sphere.py =====
 
 import math
@@ -993,7 +1070,6 @@ import sys,math
 import time
 
 
-
 from cmu_graphics import * # pyright: ignore[reportWildcardImportFromLibrary]
 app.stepsPerSecond = 120 
 
@@ -1001,6 +1077,8 @@ app.stepsPerSecond = 120
 
 
 
+
+app.spheres =[]
 exCube: Cube
 
 @game.on_ready
@@ -1012,6 +1090,17 @@ def main():
     #sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
+
+
+def onMousePress(x, y):
+    r = Ray(game.camera.position, game.camera.direction)
+    hit = r.cast()
+    if hit is None:
+        return
+    print(hit)
+    app.spheres.append(Sphere(
+        hit.position*Vector3.new(0,0,2), 25, rgb(0,255,0)
+    ))
 
 
 @game.register_tick

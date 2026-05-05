@@ -11,6 +11,7 @@ class CMUtils():
 
     def __init__(self) -> None:
         self._globals: dict = {}
+        self.locked_mouse = False
     @staticmethod
     def register_game(obj) -> "Game":
         CMUtils._game: "Game" = obj
@@ -45,3 +46,16 @@ class CMUtils():
     
             for glob, func in self._globals.items():
                 globals()[glob] = func
+                
+    def lock_mouse(self):
+        if self.is_desktop():
+            import pygame
+            pygame.mouse.set_visible(False)
+            pygame.event.set_grab(True)
+        self.locked_mouse = True
+    def unlock_mouse(self):
+        if self.is_desktop():
+            import pygame
+            pygame.mouse.set_visible(True)
+            pygame.event.set_grab(False)
+        self.locked_mouse = False

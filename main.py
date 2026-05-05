@@ -5,7 +5,7 @@ from engine.shapes.cube import Cube
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
 from engine import game
-
+from engine.ray import Ray
 
 
 from cmu_graphics import * # pyright: ignore[reportWildcardImportFromLibrary]
@@ -16,6 +16,8 @@ from engine.shapes.sphere import Sphere
 
 
 
+
+app.spheres =[]
 exCube: Cube
 
 @game.on_ready
@@ -28,6 +30,13 @@ def main():
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
 
+
+def onMousePress(x, y):
+    r = Ray(game.camera.position, game.camera.direction)
+    hit = r.cast()
+    if hit is None:
+        return
+    print(hit)
 
 @game.register_tick
 def step(dt):
