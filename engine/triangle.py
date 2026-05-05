@@ -105,31 +105,22 @@ class Triangle():
         
         self._real_fill = fill.darker().darker().darker().darker().darker()
         normal = self.center.normal
-        if existing_game.configuration.shading and render_lights:
+        if existing_game.configuration.shading:
             ambient = 0.35
             brightness = ambient
 
             for light in lights:
-                if getattr(light, "directional", False):
-                    light_dir = (-light.direction).normal
-                    diffuse = max(0.0, normal.dot(light_dir))
-                    brightness += diffuse * light.brightness
-                else:
-                    light_pos = light.position - existing_game.camera.position
-                    light_pos = light_pos.rotate(
-                        Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
-                    )
-
-                    light_dir = (light_pos - self.center).normal
-                    diffuse = max(0.0, normal.dot(light_dir))
-
-                    dist = light_pos.distance(self.center)
-                    attenuation = 1.0 / (1.0 + 0.00001 * dist * dist)
-
-                    brightness += diffuse * light.brightness * attenuation
-
+                ds = self.center.distance(light.position) / light.brightness
+                if ds > 400:
+                    continue
+                brightness = ds / 100
+                #print(brightness)
             brightness = max(0.0, min(1.0, brightness))
-
+            self._real_fill = rgb(
+                min(255,self._real_fill._red * brightness),
+                min(255,self._real_fill._green * brightness),
+                min(255,self._real_fill._blue * brightness)
+            )
 
 
 
