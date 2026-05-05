@@ -1,5 +1,5 @@
 ### CREATED BY @MOAKDOGE ###
-### CREATED ON: 05/01/26 ###
+### CREATED ON: 05/05/26 ###
 
 
 # ===== engine/vector3.py =====
@@ -371,15 +371,18 @@ class Triangle():
 
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
-        self._shape.pointList = self.extracted
+        if self._shape.pointList != self.extracted:
+            self._shape.pointList = self.extracted
         #self._shape.pointList = self.extracted
-        self._shape.fill = self._real_fill
-        self._shape.zindex = self.z
-        self._shape.border = None
+        if self._shape.fill != self._real_fill:
+            self._shape.fill = self._real_fill
+        if self._shape.zindex != self.z:
+            self._shape.zindex = self.z
         if existing_game.configuration.wireframe:
             self._shape.fill = None
             self._shape.border = self.fill
-        
+        else:
+            self._shape.border = None
 
     
 
@@ -523,21 +526,29 @@ class CMUtils():
 
 # ===== engine/polygon_factory.py =====
 
+import math
+from re import L
+
 from cmu_graphics import Polygon
 
 class PolygonFactory:
     def __init__(self, size: int = 2000) -> None:
-        self._pool: list[Polygon] = [
-            Polygon(0, 0, 0, 0, 0, 0, visible=False)
-            for _ in range(size)
-        ]
-
+        self._pool: list[Polygon]
+        self.regen(size)
         self._free: list[Polygon] = self._pool.copy()
         self._in_use: set[Polygon] = set()
 
+    def regen(self, size: int):
+        self._pool = [
+            Polygon(0, 0, 0, 0, 0, 0, visible=False)
+            for _ in range(size)
+        ]
+        self._free = self._pool.copy()
+        self._in_use = set()
+
     def reserve(self) -> Polygon:
         if not self._free:
-            raise RuntimeError("Polygon pool exhausted")
+            self.regen(math.floor(len(self._pool) * 1.5))
 
         poly = self._free.pop()
         self._in_use.add(poly)
@@ -547,7 +558,9 @@ class PolygonFactory:
 
     def free(self, poly: Polygon) -> None:
         if poly not in self._in_use:
-            raise RuntimeError("Tried to free polygon that is not currently reserved")
+            poly.visible = False
+            return
+           # raise RuntimeError("Tried to free polygon that is not currently reserved")
 
         self._in_use.remove(poly)
         self._free.append(poly)
@@ -558,6 +571,7 @@ class PolygonFactory:
 # ===== engine/_game.py =====
 
 import math
+import time
 from typing import TYPE_CHECKING
 
 from cmu_graphics import *
@@ -567,6 +581,8 @@ from cmu_graphics import *
 utils: "CMUtils" = CMUtils()
 if TYPE_CHECKING:
     from engine.shapes import Base3DShape
+
+
 
 class Game():
     class GameConfiguration():
@@ -579,7 +595,7 @@ class Game():
         shading: bool = True
         quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
-        fps_target: int = 10
+        fps_target: int = 30
         enable_auto_quality: bool = True
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
 
@@ -597,11 +613,17 @@ class Game():
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
+        self._last_dt = time.perf_counter()
+        self._events: dict[str, list] = {}
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
 
-
+    def register_tick(self, func):
+        if not "tick" in self._events:
+            self._events["tick"] = []
+        self._events["tick"].append(func)
+        return func
 
     @utils.make_global
     def onKeyHold(self, key):
@@ -637,6 +659,16 @@ class Game():
         if "q" == key:
             self.configuration.wireframe = not self.configuration.wireframe
 
+    @utils.make_global
+    def onStep(self):
+        _dt = time.perf_counter() - self._last_dt
+        self._last_dt = time.perf_counter()
+        self.tick()
+        self.fps = 1/_dt
+        app.dt = _dt
+        for fn in self._events.get("tick", []):
+            fn(_dt)
+        pass
         
     def add_triangle(self, triangle):
         self._triangle_seq += 1
@@ -668,6 +700,7 @@ class Game():
             if not hasattr(tri, "_shape"):
                 continue
             tri._shape.toFront()
+            
     def render_triangles(self):
         zbuffer = None
         zwidth = 0
@@ -687,17 +720,17 @@ class Game():
 
         if utils.is_desktop():
             import cmu_graphics.cmu_graphics as cmp
-            cmp.DRAWING_LOCK.__enter__(True)
+            cmp.DRAWING_LOCK.__enter__()
+        try:
+            for triangle in sorted_triangles:
+                if zbuffer is not None and not self._zbuffer_test(triangle, zbuffer, zwidth, zheight, zscale):
+                    continue
+                triangle.draw()
 
-        for triangle in sorted_triangles:
-            if zbuffer is not None and not self._zbuffer_test(triangle, zbuffer, zwidth, zheight, zscale):
-                continue
-            triangle.draw()
-
-
-        if utils.is_desktop():
-            import cmu_graphics.cmu_graphics as cmp
-            cmp.DRAWING_LOCK.__exit__(None, None, None)
+        finally:
+            if utils.is_desktop():
+                import cmu_graphics.cmu_graphics as cmp
+                cmp.DRAWING_LOCK.__exit__(None, None, None)
 
     def _zbuffer_test(
         self,
@@ -895,8 +928,8 @@ class Sphere(Base3DShape):
         
     def draw(self):
         vertices: list[Vector3] = []
-        lat_steps =5 if game.utils.is_web() else 30#math.ceil(5 * game.configuration.quality)
-        lon_steps =5 if game.utils.is_web() else 30#math.ceil(30 * (game.configuration.quality/8))
+        lat_steps =5 if game.utils.is_web() else 15#math.ceil(5 * game.configuration.quality)
+        lon_steps =5 if game.utils.is_web() else 15#math.ceil(30 * (game.configuration.quality/8))
 
 
 
@@ -952,6 +985,9 @@ app.fpsLabel = Label("FPS: 0", 370, 20)
 app.triangleLabel = Label("Triangles: 0", 360, 50)
 
 posX = 0
+pool_size = 400
+min_pool = 120
+max_pool = 1600
 
 
 
@@ -962,48 +998,16 @@ fps_trend: list[float] = []
 dt_ema = 1 / game.configuration.fps_target
 #i = Image("/home/moakdoge/Downloads/Pipoya RPG Tileset 32x32/LightShadow_pipo.png", 50, 50)
 #print(i._shape.__dict__)
-def onStep():
-    global MAX_AREA, dt_ema
-    start = time.perf_counter()
-    global posX
-    game.tick()
-    posX += 1
 
-    app.dt = max(0.0001, time.perf_counter() - start)
-    game.fps = math.floor(1/app.dt)
-    if game.configuration.enable_auto_quality:
-        fps_trend.append(app.dt)
-        if len(fps_trend) > 600:
-            fps_trend.pop(0)
-
-        target_dt = 1 / game.configuration.fps_target
-        dt_ema = (dt_ema * 0.9) + (app.dt * 0.1)
-        performance_ratio = target_dt / dt_ema
-
-        
-        
-        RANGE = 0.05
-
-        if posX %4 == 0 :
-            if performance_ratio < (1-RANGE): # below target FPS
-                game.configuration.quality *= max(0.90, 1 - (0.985 - performance_ratio) * 0.18)
-            elif performance_ratio > (1+RANGE): # above target FPS
-                game.configuration.quality *= min(1.08, 1 + (performance_ratio - 1.015) * 0.12)
-
-            game.configuration.quality = max(game.configuration.min_quality, min(4.0, game.configuration.quality))
-
-            print(f"Q:{game.configuration.quality:.3f} FPS:{(1 / dt_ema):.1f} TARGET:{game.configuration.fps_target}")
-
-    #okay.
+@game.register_tick
+def step(dt):
     MAX_AREA = 180 / (game.configuration.quality*2)
 
     #print(MAX_AREA, min(fps_trend))
-    app.fpsLabel.value = f"FPS: {rounded(1/app.dt)}"
+    app.fpsLabel.value = f"FPS: {rounded(1/dt)}"
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
-
-
 
 
 game.utils.run()

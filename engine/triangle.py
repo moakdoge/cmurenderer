@@ -134,15 +134,22 @@ class Triangle():
 
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
-        self._shape.pointList = self.extracted
+        if self._shape.pointList != self.extracted:
+            self._shape.pointList = self.extracted
         #self._shape.pointList = self.extracted
-        self._shape.fill = self._real_fill
-        self._shape.zindex = self.z
-        self._shape.border = None
+        if self._shape.fill != self._real_fill:
+            self._shape.fill = self._real_fill
+        try:
+            if getattr(self._shape, "zindex", -1) != self.z:
+                self._shape.zindex = self.z
+        except Exception as e:    
+            self._shape.zindex = self.z
         if existing_game.configuration.wireframe:
             self._shape.fill = None
             self._shape.border = self.fill
-        
+        else:
+            self._shape.border = None
+        self._shape.visible = True
 
     
 

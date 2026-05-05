@@ -1,4 +1,5 @@
 import math
+import time
 from typing import TYPE_CHECKING
 
 from cmu_graphics import *
@@ -16,6 +17,8 @@ from engine.polygon_factory import PolygonFactory
 if TYPE_CHECKING:
     from engine.shapes import Base3DShape
 
+
+
 class Game():
     class GameConfiguration():
         wireframe: bool = False
@@ -27,7 +30,7 @@ class Game():
         shading: bool = True
         quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
-        fps_target: int = 10
+        fps_target: int = 30
         enable_auto_quality: bool = True
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
 
@@ -45,11 +48,17 @@ class Game():
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
+        self._last_dt = time.perf_counter()
+        self._events: dict[str, list] = {}
         app.inspectorEnabled = False
         if utils.is_web():
             self.configuration.quality = self.configuration.cmu_quality
 
-
+    def register_tick(self, func):
+        if not "tick" in self._events:
+            self._events["tick"] = []
+        self._events["tick"].append(func)
+        return func
 
     @utils.make_global
     def onKeyHold(self, key):
@@ -85,6 +94,16 @@ class Game():
         if "q" == key:
             self.configuration.wireframe = not self.configuration.wireframe
 
+    @utils.make_global
+    def onStep(self):
+        _dt = time.perf_counter() - self._last_dt
+        self._last_dt = time.perf_counter()
+        self.tick()
+        self.fps = 1/_dt
+        app.dt = _dt
+        for fn in self._events.get("tick", []):
+            fn(_dt)
+        pass
         
     def add_triangle(self, triangle):
         self._triangle_seq += 1
@@ -116,6 +135,7 @@ class Game():
             if not hasattr(tri, "_shape"):
                 continue
             tri._shape.toFront()
+            
     def render_triangles(self):
         zbuffer = None
         zwidth = 0
@@ -135,17 +155,17 @@ class Game():
 
         if utils.is_desktop():
             import cmu_graphics.cmu_graphics as cmp
-            cmp.DRAWING_LOCK.__enter__(True)
+            cmp.DRAWING_LOCK.__enter__()
+        try:
+            for triangle in sorted_triangles:
+                if zbuffer is not None and not self._zbuffer_test(triangle, zbuffer, zwidth, zheight, zscale):
+                    continue
+                triangle.draw()
 
-        for triangle in sorted_triangles:
-            if zbuffer is not None and not self._zbuffer_test(triangle, zbuffer, zwidth, zheight, zscale):
-                continue
-            triangle.draw()
-
-
-        if utils.is_desktop():
-            import cmu_graphics.cmu_graphics as cmp
-            cmp.DRAWING_LOCK.__exit__(None, None, None)
+        finally:
+            if utils.is_desktop():
+                import cmu_graphics.cmu_graphics as cmp
+                cmp.DRAWING_LOCK.__exit__(None, None, None)
 
     def _zbuffer_test(
         self,

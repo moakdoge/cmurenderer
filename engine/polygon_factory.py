@@ -25,16 +25,16 @@ class PolygonFactory:
         poly = self._free.pop()
         self._in_use.add(poly)
 
-        poly.visible = True
+        
         return poly
 
     def free(self, poly: Polygon) -> None:
         if poly not in self._in_use:
-            poly.visible = False
+            #poly.visible = False
             return
            # raise RuntimeError("Tried to free polygon that is not currently reserved")
 
         self._in_use.remove(poly)
         self._free.append(poly)
 
-        poly.visible = False
+        #poly.visible = False
