@@ -55,6 +55,12 @@ class Vector3():
                 self.y * other,
                 self.z * other
             )
+        else:
+            return Vector3(
+                self.x * other.x,
+                self.y * other.y,
+                self.z * other.z
+            )
         raise TypeError("Can only multiply Vector3 by scalar")
     def __add__(self, other: "Vector3") -> "Vector3":
         if isinstance(other, Vector3):
@@ -365,31 +371,22 @@ class Triangle():
         
         self._real_fill = fill.darker().darker().darker().darker().darker()
         normal = self.center.normal
-        if existing_game.configuration.shading and render_lights:
+        if existing_game.configuration.shading:
             ambient = 0.35
             brightness = ambient
 
             for light in lights:
-                if getattr(light, "directional", False):
-                    light_dir = (-light.direction).normal
-                    diffuse = max(0.0, normal.dot(light_dir))
-                    brightness += diffuse * light.brightness
-                else:
-                    light_pos = light.position - existing_game.camera.position
-                    light_pos = light_pos.rotate(
-                        Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
-                    )
-
-                    light_dir = (light_pos - self.center).normal
-                    diffuse = max(0.0, normal.dot(light_dir))
-
-                    dist = light_pos.distance(self.center)
-                    attenuation = 1.0 / (1.0 + 0.00001 * dist * dist)
-
-                    brightness += diffuse * light.brightness * attenuation
-
+                ds = self.center.distance(light.position) / light.brightness
+                if ds > 400:
+                    continue
+                brightness = ds / 100
+                #print(brightness)
             brightness = max(0.0, min(1.0, brightness))
-
+            self._real_fill = rgb(
+                min(255,self._real_fill._red * brightness),
+                min(255,self._real_fill._green * brightness),
+                min(255,self._real_fill._blue * brightness)
+            )
 
 
 
@@ -516,22 +513,41 @@ if TYPE_CHECKING:
     from engine._game import Game
 class CMUtils():
     _game: "Game"
-    
-
     def __init__(self) -> None:
         self._globals: dict = {}
+        self.locked_mouse = False
     @staticmethod
     def register_game(obj) -> "Game":
         CMUtils._game: "Game" = obj
         return obj
+    
+    
+    @property
+    def cmu_graphics(self):
+        if self.is_desktop():
+            import cmu_graphics
+            return cmu_graphics
+        return None
+    
+    @property
+    def version(self):
+        if self.is_desktop():
+            from cmu_graphics import cmu_graphics
+            return cmu_graphics.get_update_info()
+        
+        
 
-    def make_global(self, obj, name=None):
+    def make_global(self, obj, name=None, desktop: bool = True, web: bool = True):
         def wrapper(*args, **kwargs):
             return CMUtils._game.__class__.__dict__[obj.__name__](
                 CMUtils._game,
                 *args,
                 **kwargs
             )
+        if not desktop and self.is_desktop():
+            return obj
+        if not web and self.is_web():
+            return obj
         self._globals[name or obj.__name__] = wrapper
         return obj
 
@@ -539,8 +555,8 @@ class CMUtils():
     def is_web() -> Literal[False]:
         return (sys.implementation.name == "brython") # type: ignore
 
-    @classmethod
-    def is_desktop(cls) -> Literal[True]:
+    @staticmethod
+    def is_desktop() -> Literal[True]:
         return (sys.implementation.name == "cpython") # pyright: ignore[reportReturnType]
     
     def run(self):
@@ -554,6 +570,22 @@ class CMUtils():
     
             for glob, func in self._globals.items():
                 globals()[glob] = func
+                
+    def lock_mouse(self):
+        '''Unsupported on CMU'''
+        if self.is_desktop():
+            import pygame
+            pygame.mouse.set_visible(False)
+            pygame.event.set_grab(True)
+        self.locked_mouse = True
+    def unlock_mouse(self):
+        '''Unsupported on CMU'''
+        if self.is_desktop():
+            import pygame
+            pygame.mouse.set_visible(True)
+            pygame.event.set_grab(False)
+        self.locked_mouse = False
+        
 
 
 # ===== engine/polygon_factory.py =====
@@ -625,7 +657,7 @@ class Game():
         zbuffer_scale: int = 6 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
-        shading: bool = False
+        shading: bool = True
         quality: float = 0.4  #increase for worse quality
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
@@ -644,7 +676,7 @@ class Game():
         self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
-        #self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1)
+        self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=15)
         self._last_dt = time.perf_counter()
         self._events: dict[str, list] = {}
         self._main_function: Callable | None = None
@@ -664,7 +696,15 @@ class Game():
         return func
 
 
-    
+    @utils.make_global
+    def onMouseMove(self, x, y):
+        if self.utils.locked_mouse:
+            import pygame
+            pygame.event.pump()
+            rx, ry = pygame.mouse.get_rel()
+            self.camera.yaw += rx * app.dt * -1
+            self.camera.pitch += ry * app.dt * -1
+        
     @utils.make_global
     def onKeyHold(self,keys):
         
@@ -702,6 +742,11 @@ class Game():
         if "q" == key:
             self.configuration.wireframe = not self.configuration.wireframe
 
+        if "z" == key:
+            self.utils.unlock_mouse()
+            
+        if "x" == key:
+            self.utils.lock_mouse()
     @utils.make_global
     def onStep(self):
         _dt = time.perf_counter() - self._last_dt
@@ -956,8 +1001,8 @@ class Cube(Base3DShape):
                 int(self.fill.blue * brightness),
             )
 
-            Triangle(self.position, v1, v2, v3, fill=face_fill, render_lights=False)
-            Triangle(self.position, v1, v3, v4, fill=face_fill, render_lights=False)
+            Triangle(self.position, v1, v2, v3, fill=self.fill, render_lights=False)
+            Triangle(self.position, v1, v3, v4, fill=self.fill, render_lights=False)
 
 
 # ===== engine/ray.py =====
@@ -1083,6 +1128,7 @@ exCube: Cube
 
 @game.on_ready
 def main():
+    print(game.utils.version)
     global exCube
     app.fpsLabel = Label("FPS: 0", 370, 20)
     app.triangleLabel = Label("Triangles: 0", 360, 50)
@@ -1098,10 +1144,6 @@ def onMousePress(x, y):
     if hit is None:
         return
     print(hit)
-    app.spheres.append(Sphere(
-        hit.position*Vector3.new(0,0,2), 25, rgb(0,255,0)
-    ))
-
 
 @game.register_tick
 def step(dt):

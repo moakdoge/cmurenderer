@@ -22,6 +22,7 @@ exCube: Cube
 
 @game.on_ready
 def main():
+    print(game.utils.version)
     global exCube
     app.fpsLabel = Label("FPS: 0", 370, 20)
     app.triangleLabel = Label("Triangles: 0", 360, 50)
