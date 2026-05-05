@@ -376,13 +376,17 @@ class Triangle():
         #self._shape.pointList = self.extracted
         if self._shape.fill != self._real_fill:
             self._shape.fill = self._real_fill
-        if self._shape.zindex != self.z:
+        try:
+            if getattr(self._shape, "zindex", -1) != self.z:
+                self._shape.zindex = self.z
+        except Exception as e:    
             self._shape.zindex = self.z
         if existing_game.configuration.wireframe:
             self._shape.fill = None
             self._shape.border = self.fill
         else:
             self._shape.border = None
+        self._shape.visible = True
 
     
 
@@ -553,19 +557,19 @@ class PolygonFactory:
         poly = self._free.pop()
         self._in_use.add(poly)
 
-        poly.visible = True
+        
         return poly
 
     def free(self, poly: Polygon) -> None:
         if poly not in self._in_use:
-            poly.visible = False
+            #poly.visible = False
             return
            # raise RuntimeError("Tried to free polygon that is not currently reserved")
 
         self._in_use.remove(poly)
         self._free.append(poly)
 
-        poly.visible = False
+        #poly.visible = False
 
 
 # ===== engine/_game.py =====
@@ -609,7 +613,7 @@ class Game():
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
         self._triangle_seq = 0
-        self.polygon_factory: "PolygonFactory" = PolygonFactory()
+        self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)

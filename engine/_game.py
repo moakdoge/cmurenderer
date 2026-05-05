@@ -26,6 +26,7 @@ class Game():
         backface_cull: bool = False
         zbuffer: bool = True
         zbuffer_scale: int = 6
+        fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
         shading: bool = True
         quality: float = 0.4  #increase for worse quality
@@ -44,7 +45,7 @@ class Game():
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
         self._triangle_seq = 0
-        self.polygon_factory: "PolygonFactory" = PolygonFactory()
+        self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=1500)
@@ -150,7 +151,7 @@ class Game():
             self.triangles,
             reverse=True,
             key = lambda tri: tri.physical_area * tri.screen_area
-        )[0:math.floor(self.configuration.quality*(len(self.triangles)-1))]
+        )#[0:math.floor(self.configuration.quality*2*(len(self.triangles)-1))]
 
 
         if utils.is_desktop():

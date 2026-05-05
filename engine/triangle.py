@@ -25,6 +25,7 @@ class Triangle():
         self.fill = fill
         self._count = len(points)
         self._real_fill= fill
+        self.fogged = False
 
 
         if not pretransformed:
@@ -73,6 +74,13 @@ class Triangle():
             self.screen = screens
 
         self.extracted = [list(sublist) for sublist in self.screen]
+        lowest = 140 * existing_game.configuration.fog
+        if (self.screen_area < lowest):
+            return
+        
+        if (self.screen_area > lowest and self.screen_area < lowest * 1.25):
+            fill = fill.darker().darker().darker()
+            self.fogged = True
 
         self.center = Vector3.new(
             sum(_.x for _ in self.points) / self._count,
@@ -149,6 +157,10 @@ class Triangle():
             self._shape.border = self.fill
         else:
             self._shape.border = None
+        if self.fogged:
+            self._shape.opacity = 50
+        else:
+            self._shape.opacity = 100
         self._shape.visible = True
 
     
