@@ -16,34 +16,22 @@ utils: "CMUtils" = CMUtils()
 from engine.polygon_factory import PolygonFactory
 if TYPE_CHECKING:
     from engine.shapes import Base3DShape
+    from engine.config import GameConfiguration
 
 
 
 class Game():
-    class GameConfiguration():
-        wireframe: bool = False
-        near_clip: bool = True
-        debug: bool = True
-        min_physical_area_cull: int = 50_000
-        backface_cull: bool = False
-        zbuffer: bool = True
-        zbuffer_scale: int = 6 if utils.is_desktop() else 18
-        fog: float = 1.25 #the strength of the fog
-        max_triangles: int = 1950
-        shading: bool = True
-        quality: float = 0.8  #increase for worse quality
-        cmu_quality: float = 0.125 #for CMU WEB only
-        fps_target: int = 30
-        min_quality: float = 0.25 if utils.is_desktop() else 0.01
-        shadows: bool = utils.is_desktop()
 
     def __init__(self):
         global utils
+        if utils.is_desktop():
+            from engine.config import GameConfiguration
+        
         self.utils = utils
         utils.register_game(self)
         self.camera = Camera()
         self.player = Player(self.camera)
-        self.configuration = self.GameConfiguration()
+        self.configuration: "GameConfiguration"
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
         self._triangle_seq = 0
@@ -56,8 +44,6 @@ class Game():
         self._main_function: Callable | None = None
         self.frames = 0
         app.inspectorEnabled = False
-        if utils.is_web():
-            self.configuration.quality = self.configuration.cmu_quality
 
     def register_tick(self, func):
         if not "tick" in self._events:
@@ -121,7 +107,7 @@ class Game():
             return
     
         if "q" == key:
-            self.configuration.wireframe = not self.configuration.wireframe
+            self.configuration.debug.wireframe = not self.configuration.debug.wireframe
 
         if "z" == key:
             self.utils.unlock_mouse()
@@ -162,7 +148,7 @@ class Game():
         self._triangle_seq = 0
     
     def zlayer_screen(self):
-        ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.quality*1.125)))
+        ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.current.quality*1.125)))
         
         sorted_triangles = sorted(
             self.triangles,
@@ -179,8 +165,8 @@ class Game():
         zbuffer = None
         zwidth = 0
         zheight = 0
-        zscale = max(1, int(self.configuration.zbuffer_scale))
-        if self.configuration.zbuffer:
+        zscale = max(1, int(self.configuration.current.zbuffer_size))
+        if self.configuration.current.zbuffer_enabled:
             zwidth = max(1, 400 // zscale)
             zheight = max(1, 400 // zscale)
             zbuffer = [[float("inf")] * zwidth for _ in range(zheight)]
@@ -270,12 +256,13 @@ class Game():
         self.clear_screen()
         self.camera.tick()
         for shape in self._shapes:
-            shape.draw()
+            shape._draw()
         self.render_triangles()
         self.player.update()
         self.zlayer_screen()
 
     def run(self):
+        
         if self._main_function is not None:
             self._main_function()
         self.utils.run()

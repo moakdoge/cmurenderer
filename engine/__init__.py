@@ -1,4 +1,5 @@
 from engine._game import Game
+from engine.config import GameConfiguration
 game = Game()
 
 if not game.utils.is_web():
@@ -9,3 +10,5 @@ if not game.utils.is_web():
             break
 else:
     existing_game = game
+    
+game.configuration = GameConfiguration()

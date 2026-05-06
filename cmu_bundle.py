@@ -593,8 +593,8 @@ class Triangle():
         return [list(sublist) for sublist in self.screen]
     
     def is_foggy(self) -> bool:
-        lowest = 140 * existing_game.configuration.fog
-        v = (self.screen_area < lowest) and (self.physical_area < existing_game.configuration.min_physical_area_cull)
+        lowest = 140
+        v = (self.screen_area < lowest) and (self.physical_area < existing_game.configuration.current.minimum_physical_area_cull)
         return v
     
     def is_too_small(self) -> bool:
@@ -602,7 +602,7 @@ class Triangle():
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        v=(ar < (50 / existing_game.configuration.quality)) and (self.physical_area < existing_game.configuration.min_physical_area_cull)
+        v=(ar < (50 / existing_game.configuration.current.quality)) and (self.physical_area < existing_game.configuration.current.minimum_physical_area_cull)
     
         return v
     
@@ -627,7 +627,7 @@ class Triangle():
         tmp_fill = set_brightness(start, 0.8)
         world_points = self.world_points
         world_center = self.world_center
-        if existing_game.configuration.shading:
+        if existing_game.configuration.current.shading:
             face_normal = (world_points[1] - world_points[0]).cross(
                 world_points[2] - world_points[0]
             ).normal
@@ -705,7 +705,7 @@ class Triangle():
             self._shape.border = self._real_fill
         else:
             self._shape.border = None
-        if existing_game.configuration.wireframe:
+        if existing_game.configuration.debug.wireframe:
             self._shape.fill = None
         self._shape.opacity = self.opacity
         self._shape.visible = True
@@ -940,34 +940,22 @@ from cmu_graphics import *
 utils: "CMUtils" = CMUtils()
 if TYPE_CHECKING:
     from engine.shapes import Base3DShape
+    from engine.config import GameConfiguration
 
 
 
 class Game():
-    class GameConfiguration():
-        wireframe: bool = False
-        near_clip: bool = True
-        debug: bool = True
-        min_physical_area_cull: int = 50_000
-        backface_cull: bool = False
-        zbuffer: bool = True
-        zbuffer_scale: int = 6 if utils.is_desktop() else 18
-        fog: float = 1.25 #the strength of the fog
-        max_triangles: int = 1950
-        shading: bool = True
-        quality: float = 0.8  #increase for worse quality
-        cmu_quality: float = 0.125 #for CMU WEB only
-        fps_target: int = 30
-        min_quality: float = 0.25 if utils.is_desktop() else 0.01
-        shadows: bool = utils.is_desktop()
 
     def __init__(self):
         global utils
+        if utils.is_desktop():
+            from engine.config import GameConfiguration
+        
         self.utils = utils
         utils.register_game(self)
         self.camera = Camera()
         self.player = Player(self.camera)
-        self.configuration = self.GameConfiguration()
+        self.configuration: "GameConfiguration"
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
         self._triangle_seq = 0
@@ -980,8 +968,6 @@ class Game():
         self._main_function: Callable | None = None
         self.frames = 0
         app.inspectorEnabled = False
-        if utils.is_web():
-            self.configuration.quality = self.configuration.cmu_quality
 
     def register_tick(self, func):
         if not "tick" in self._events:
@@ -1045,7 +1031,7 @@ class Game():
             return
     
         if "q" == key:
-            self.configuration.wireframe = not self.configuration.wireframe
+            self.configuration.debug.wireframe = not self.configuration.debug.wireframe
 
         if "z" == key:
             self.utils.unlock_mouse()
@@ -1086,7 +1072,7 @@ class Game():
         self._triangle_seq = 0
     
     def zlayer_screen(self):
-        ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.quality*1.125)))
+        ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.current.quality*1.125)))
         
         sorted_triangles = sorted(
             self.triangles,
@@ -1103,8 +1089,8 @@ class Game():
         zbuffer = None
         zwidth = 0
         zheight = 0
-        zscale = max(1, int(self.configuration.zbuffer_scale))
-        if self.configuration.zbuffer:
+        zscale = max(1, int(self.configuration.current.zbuffer_size))
+        if self.configuration.current.zbuffer_enabled:
             zwidth = max(1, 400 // zscale)
             zheight = max(1, 400 // zscale)
             zbuffer = [[float("inf")] * zwidth for _ in range(zheight)]
@@ -1194,17 +1180,75 @@ class Game():
         self.clear_screen()
         self.camera.tick()
         for shape in self._shapes:
-            shape.draw()
+            shape._draw()
         self.render_triangles()
         self.player.update()
         self.zlayer_screen()
 
     def run(self):
+        
         if self._main_function is not None:
             self._main_function()
         self.utils.run()
         if self.utils.is_web():
             self.warning()
+
+
+# ===== engine/config.py =====
+
+
+
+
+@dataclass(slots=True)
+class DebugConfiguration:
+    debug: bool = True
+    wireframe: bool = False
+    
+@dataclass(slots=True)
+class PerformanceConfiguration:
+    minimum_physical_area_cull: int = 50_000
+    zbuffer_enabled: bool = True
+    zbuffer_size: int = 6
+    max_triangles: int = 1950
+    shading: bool = True
+    quality: float = 0.8
+    shadows: bool = True
+
+    
+
+@dataclass(slots=True)
+class GameConfiguration:
+    debug: DebugConfiguration = DebugConfiguration()
+    web: PerformanceConfiguration = PerformanceConfiguration(
+        zbuffer_size=8,
+        max_triangles=400,
+        shading=False,
+        quality=0.25,
+        shadows=False
+    )
+    desktop: PerformanceConfiguration = PerformanceConfiguration()
+    
+    #used to just get whatever the current one is
+    @property
+    def current(self) -> PerformanceConfiguration:
+        if CMUtils.is_desktop():
+            return self.desktop
+        return self.web
+    
+    '''
+    min_physical_area_cull: int = 50_000
+    backface_cull: bool = False
+    zbuffer: bool = True
+    zbuffer_scale: int = 6 if utils.is_desktop() else 18
+    fog: float = 1.25 #the strength of the fog
+    max_triangles: int = 1950
+    shading: bool = True
+    quality: float = 0.8  #increase for worse quality
+    cmu_quality: float = 0.125 #for CMU WEB only
+    fps_target: int = 30
+    min_quality: float = 0.25 if utils.is_desktop() else 0.01
+    shadows: bool = utils.is_desktop()
+    '''
 
 
 # ===== engine/__init__.py =====
@@ -1219,6 +1263,8 @@ if not game.utils.is_web():
             break
 else:
     existing_game = game
+    
+game.configuration = GameConfiguration()
 
 
 # ===== engine/shapes/__init__.py =====
@@ -1234,8 +1280,23 @@ class Base3DShape:
         self.size: Vector3 = size
         self.fill: "RGB" = fill or rgb(255,0,0)
         self.rotation: Vector3 = Vector3.zero()
+        self.valid = True
         game._shapes.append(self)
+    
 
+
+
+
+
+        
+    def _draw(self):
+        size, position = self.size, self.position
+        ds = position.distance(game.camera.position)
+        sz = ds - (max(size.x, size.y, size.z))
+        if sz > (800*game.configuration.current.quality):
+            return
+        self.draw()
+        
     def draw(self):
         raise NotImplementedError
 
@@ -1360,7 +1421,7 @@ class Ray:
         if t >= self.distance:
             return None
 
-        return t
+        return t # type: ignore
     
     def cast(self) -> Triangle | None: 
 
@@ -1385,6 +1446,8 @@ class Sphere(Base3DShape):
         self.radius = radius
         
     def draw(self):
+        if not self.valid:
+            return
         vertices: list[Vector3] = []
         lat_steps =5 if game.utils.is_web() else 15#math.ceil(5 * game.configuration.quality)
         lon_steps =5 if game.utils.is_web() else 15#math.ceil(30 * (game.configuration.quality/8))
@@ -1447,8 +1510,7 @@ def main():
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
     corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
-    r = Ray(Vector3.zero(), Vector3.zero())
-    print(Ray)
+
 @game.register_tick
 def step(dt):
     #print(MAX_AREA, min(fps_trend))

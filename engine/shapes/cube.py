@@ -13,6 +13,8 @@ from engine import game
 
 class Cube(Base3DShape):
     def draw(self):
+        if not self.valid:
+            return
         vertices = [
             Vector3(-1, -1, -1),
             Vector3( 1, -1, -1),

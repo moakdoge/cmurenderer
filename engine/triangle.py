@@ -108,8 +108,8 @@ class Triangle():
         return [list(sublist) for sublist in self.screen]
     
     def is_foggy(self) -> bool:
-        lowest = 140 * existing_game.configuration.fog
-        v = (self.screen_area < lowest) and (self.physical_area < existing_game.configuration.min_physical_area_cull)
+        lowest = 140
+        v = (self.screen_area < lowest) and (self.physical_area < existing_game.configuration.current.minimum_physical_area_cull)
         return v
     
     def is_too_small(self) -> bool:
@@ -117,7 +117,7 @@ class Triangle():
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        v=(ar < (50 / existing_game.configuration.quality)) and (self.physical_area < existing_game.configuration.min_physical_area_cull)
+        v=(ar < (50 / existing_game.configuration.current.quality)) and (self.physical_area < existing_game.configuration.current.minimum_physical_area_cull)
     
         return v
     
@@ -142,7 +142,7 @@ class Triangle():
         tmp_fill = set_brightness(start, 0.8)
         world_points = self.world_points
         world_center = self.world_center
-        if existing_game.configuration.shading:
+        if existing_game.configuration.current.shading:
             face_normal = (world_points[1] - world_points[0]).cross(
                 world_points[2] - world_points[0]
             ).normal
@@ -220,7 +220,7 @@ class Triangle():
             self._shape.border = self._real_fill
         else:
             self._shape.border = None
-        if existing_game.configuration.wireframe:
+        if existing_game.configuration.debug.wireframe:
             self._shape.fill = None
         self._shape.opacity = self.opacity
         self._shape.visible = True

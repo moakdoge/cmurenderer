@@ -15,6 +15,8 @@ class Sphere(Base3DShape):
         self.radius = radius
         
     def draw(self):
+        if not self.valid:
+            return
         vertices: list[Vector3] = []
         lat_steps =5 if game.utils.is_web() else 15#math.ceil(5 * game.configuration.quality)
         lon_steps =5 if game.utils.is_web() else 15#math.ceil(30 * (game.configuration.quality/8))

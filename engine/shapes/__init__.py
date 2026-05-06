@@ -11,7 +11,22 @@ class Base3DShape:
         self.size: Vector3 = size
         self.fill: "RGB" = fill or rgb(255,0,0)
         self.rotation: Vector3 = Vector3.zero()
+        self.valid = True
         game._shapes.append(self)
+    
 
+
+
+
+
+        
+    def _draw(self):
+        size, position = self.size, self.position
+        ds = position.distance(game.camera.position)
+        sz = ds - (max(size.x, size.y, size.z))
+        if sz > (800*game.configuration.current.quality):
+            return
+        self.draw()
+        
     def draw(self):
         raise NotImplementedError
