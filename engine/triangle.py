@@ -47,16 +47,19 @@ class Triangle():
         )
         if render_lights:
             self._real_fill = fill.darker().darker().darker().darker().darker()
-            normal = world_center.normal
             if render_lights and existing_game.configuration.shading:
+                face_normal = (world_points[1] - world_points[0]).cross(
+                    world_points[2] - world_points[0]
+                ).normal
                 ambient = 0.35
                 brightness = ambient
 
                 for light in lights:
-                    ds = world_center.distance(light.position) / light.brightness
-                    if ds > 400:
-                        continue
-                    brightness = max(brightness, 1 - ds / 400)
+                    light_dir = (light.position - world_center).normal
+                    diffuse = max(0.0, face_normal.dot(light_dir))
+                    dist = light.position.distance(world_center)
+                    attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
+                    brightness += diffuse * light.brightness * attenuation
 
                 brightness = max(0.0, min(1.0, brightness))
 
@@ -68,7 +71,7 @@ class Triangle():
                 
                 
                 
-                if render_shadow:
+                if render_shadow and existing_game.configuration.shadows:
                     _lowest_y = min([p.y for p in self.points])
                     _p = [
                         Vector3.new(p.x, -50, p.z) for p in self.points
@@ -76,7 +79,7 @@ class Triangle():
                     self.shadow = Triangle(
                         self.position - Vector3.new(0, 50, 0),
                         *_p,
-                        fill=rgb(25,25,25),
+                        fill=rgb(0,0,0),
                         render_lights=False,
                         skip_near_clip=False,
                         opacity=25     ,
@@ -92,9 +95,12 @@ class Triangle():
 
         clipped = [tuple(self.points)] if skip_near_clip else self.clip_near()
         if not clipped:
+            existing_game.remove_triangle(self.shadow)
             return
 
         if len(clipped) > 1:
+            existing_game.remove_triangle(self.shadow)
+            self.shadow = None
             _, second = clipped
             Triangle(
                 Vector3.zero(),
@@ -103,7 +109,9 @@ class Triangle():
                 texture=texture,
                 pretransformed=True,
                 render_lights=False,
-                skip_near_clip=True
+                skip_near_clip=True,
+                opacity=opacity,
+                render_shadow=False
             )
 
         self.points = list(clipped[0])
@@ -111,8 +119,10 @@ class Triangle():
         
         
 
+        min_physical_area_cull = 50000
+
         #check offscreen
-        if all(_.offscreen for _ in self.points):
+        if all(_.offscreen for _ in self.points) and (self.physical_area < min_physical_area_cull):
             existing_game.remove_triangle(self.shadow)
             return
         
@@ -132,7 +142,7 @@ class Triangle():
 
         self.extracted = [list(sublist) for sublist in self.screen]
         lowest = 140 * existing_game.configuration.fog
-        if (self.screen_area < lowest):
+        if (self.screen_area < lowest) and (self.physical_area < min_physical_area_cull):
             existing_game.remove_triangle(self.shadow)
             return
         
@@ -152,53 +162,9 @@ class Triangle():
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        if ar < (50 / existing_game.configuration.quality):
+        if (ar < (50 / existing_game.configuration.quality)) and (self.physical_area < min_physical_area_cull):
             existing_game.remove_triangle(self.shadow)
             return
-        
-        #calculate color  
-        
-
-    def project_point_to_y_plane(
-        self,
-        point: Vector3,
-        light_pos: Vector3,
-        plane_y: float = 0,
-    ) -> Vector3 | None:
-        direction = point - light_pos
-
-        if abs(direction.y) < 0.0001:
-            return None
-
-        t = (plane_y - light_pos.y) / direction.y
-
-        if t < 0:
-            return None
-
-        return light_pos + direction * t
-    def shadow_triangle_on_floor(
-        self,
-        a: Vector3,
-        b: Vector3,
-        c: Vector3,
-        light_pos: Vector3,
-        plane_y: float = 0,
-    ):
-        sa = self.project_point_to_y_plane(a, light_pos, plane_y)
-        sb = self.project_point_to_y_plane(c, light_pos, plane_y)
-        sc = self.project_point_to_y_plane(b, light_pos, plane_y)
-
-        if sa is None or sb is None or sc is None:
-            return
-        Triangle(
-            self.position,
-            sa,
-            sb,
-            sc,
-            fill=rgb(0, 0, 0),
-            render_lights=False,
-            opacity=25,
-        )
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
         if self._shape.pointList != self.extracted:
@@ -219,6 +185,7 @@ class Triangle():
             self._shape.fill = None
         self._shape.opacity = self.opacity
         self._shape.visible = True
+        self._sort_id = 1 if self.opacity == 100 else -9
 
 
 

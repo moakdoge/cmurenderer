@@ -29,7 +29,7 @@ def main():
     #sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
-
+    corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
 
 @game.register_tick
 def step(dt):

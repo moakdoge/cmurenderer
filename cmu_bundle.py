@@ -283,9 +283,13 @@ class Triangle():
         texture: str | None = None,
         pretransformed: bool = False,
         render_lights: bool = True,
-        skip_near_clip: bool = False
+        skip_near_clip: bool = False,
+        opacity: int = 100,
+        render_shadow: bool = True
     ):
-        
+        if len(points) != 3:
+            return
+        self.shadow = None
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
@@ -309,16 +313,19 @@ class Triangle():
         )
         if render_lights:
             self._real_fill = fill.darker().darker().darker().darker().darker()
-            normal = world_center.normal
             if render_lights and existing_game.configuration.shading:
+                face_normal = (world_points[1] - world_points[0]).cross(
+                    world_points[2] - world_points[0]
+                ).normal
                 ambient = 0.35
                 brightness = ambient
 
                 for light in lights:
-                    ds = world_center.distance(light.position) / light.brightness
-                    if ds > 400:
-                        continue
-                    brightness = max(brightness, 1 - ds / 400)
+                    light_dir = (light.position - world_center).normal
+                    diffuse = max(0.0, face_normal.dot(light_dir))
+                    dist = light.position.distance(world_center)
+                    attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
+                    brightness += diffuse * light.brightness * attenuation
 
                 brightness = max(0.0, min(1.0, brightness))
 
@@ -327,6 +334,23 @@ class Triangle():
                     min(255, self._real_fill.green * brightness),
                     min(255, self._real_fill.blue * brightness)
                 )
+                
+                
+                
+                if render_shadow and existing_game.configuration.shadows:
+                    _lowest_y = min([p.y for p in self.points])
+                    _p = [
+                        Vector3.new(p.x, -50, p.z) for p in self.points
+                    ]
+                    self.shadow = Triangle(
+                        self.position - Vector3.new(0, 50, 0),
+                        *_p,
+                        fill=rgb(0,0,0),
+                        render_lights=False,
+                        skip_near_clip=False,
+                        opacity=25     ,
+                        render_shadow=False  
+                    )
         if not pretransformed:
             # calculate camera offset and rotate into view space
             for i, p in enumerate(self.points):
@@ -337,9 +361,12 @@ class Triangle():
 
         clipped = [tuple(self.points)] if skip_near_clip else self.clip_near()
         if not clipped:
+            existing_game.remove_triangle(self.shadow)
             return
 
         if len(clipped) > 1:
+            existing_game.remove_triangle(self.shadow)
+            self.shadow = None
             _, second = clipped
             Triangle(
                 Vector3.zero(),
@@ -348,7 +375,9 @@ class Triangle():
                 texture=texture,
                 pretransformed=True,
                 render_lights=False,
-                skip_near_clip=True
+                skip_near_clip=True,
+                opacity=opacity,
+                render_shadow=False
             )
 
         self.points = list(clipped[0])
@@ -356,10 +385,15 @@ class Triangle():
         
         
 
+        min_physical_area_cull = 50000
+
         #check offscreen
-        if all(_.offscreen for _ in self.points):
+        if all(_.offscreen for _ in self.points) and (self.physical_area < min_physical_area_cull):
+            existing_game.remove_triangle(self.shadow)
             return
         
+        if any(_.offscreen for _ in self.points):
+            existing_game.remove_triangle(self.shadow)
 
         #calculate z and screens
         self.z = sum(_.z for _ in self.points) / self._count
@@ -374,17 +408,19 @@ class Triangle():
 
         self.extracted = [list(sublist) for sublist in self.screen]
         lowest = 140 * existing_game.configuration.fog
-        if (self.screen_area < lowest):
+        if (self.screen_area < lowest) and (self.physical_area < min_physical_area_cull):
+            existing_game.remove_triangle(self.shadow)
             return
         
 
 
-
+        self.opacity = opacity
         if existing_game.configuration.backface_cull:
             p1, p2, p3 = tuple(self.points)
             normal = (p2 - p1).cross(p3 - p1).normal
             view_dir = (-self.center).normal
             if normal.dot(view_dir) <= 0:
+                existing_game.remove_triangle(self.shadow)
                 return
 
         existing_game.add_triangle(self)
@@ -392,13 +428,9 @@ class Triangle():
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        if ar < (50 / existing_game.configuration.quality):
+        if (ar < (50 / existing_game.configuration.quality)) and (self.physical_area < min_physical_area_cull):
+            existing_game.remove_triangle(self.shadow)
             return
-        #calculate color  
-        
-
-
-
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
         if self._shape.pointList != self.extracted:
@@ -411,11 +443,17 @@ class Triangle():
                 self._shape.zindex = self.z
         except Exception as e:    
             self._shape.zindex = self.z
-        self._shape.border = self._real_fill
+        if self.opacity == 100:
+            self._shape.border = self._real_fill
+        else:
+            self._shape.border = None
         if existing_game.configuration.wireframe:
             self._shape.fill = None
-       
+        self._shape.opacity = self.opacity
         self._shape.visible = True
+        self._sort_id = 1 if self.opacity == 100 else -9
+
+
 
     
 
@@ -674,7 +712,7 @@ class Game():
         debug: bool = True
         backface_cull: bool = False
         zbuffer: bool = True
-        zbuffer_scale: int = 4 if utils.is_desktop() else 18
+        zbuffer_scale: int = 6 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
         shading: bool = True
@@ -682,6 +720,7 @@ class Game():
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
+        shadows: bool = utils.is_desktop()
 
     def __init__(self):
         global utils
@@ -792,8 +831,12 @@ class Game():
         self.triangles.append(triangle)
         self._triangle_count += 1
     
-    def remove_triangle(self, triangle):
+    def remove_triangle(self, triangle: "Triangle | None"):
         if triangle in self.triangles:
+            if hasattr(triangle, "_shape"):
+                self.polygon_factory.free(triangle._shape)
+                triangle._shape.visible = False
+                del triangle._shape
             self.triangles.remove(triangle)
             self._triangle_count -= 1
     
@@ -809,7 +852,7 @@ class Game():
         sorted_triangles = sorted(
             self.triangles,
             reverse=True,
-            key=lambda tri: tri.z + (tri._sort_id * 1e-6) # type: ignore
+            key=lambda tri: tri.z + (tri._sort_id * 1e-6) + 4*(tri.opacity == 100) # type: ignore
         )
 
         for tri in sorted_triangles:
@@ -963,7 +1006,7 @@ class Base3DShape:
 import math
 from typing import TYPE_CHECKING
 
-from cmu_graphics import rgb
+from cmu_graphics import Circle, rgb
 
 if TYPE_CHECKING:
     from cmu_graphics.shape_logic import RGB
@@ -1029,10 +1072,10 @@ class Cube(Base3DShape):
                 int(self.fill.green * brightness),
                 int(self.fill.blue * brightness),
             )
-            print(self.fill)
 
             Triangle(self.position, v1, v2, v3, fill=self.fill)
             Triangle(self.position, v1, v3, v4, fill=self.fill)
+        
 
 
 # ===== engine/ray.py =====
@@ -1164,7 +1207,7 @@ def main():
     #sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
-
+    corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
 
 @game.register_tick
 def step(dt):

@@ -25,7 +25,7 @@ class Game():
         debug: bool = True
         backface_cull: bool = False
         zbuffer: bool = True
-        zbuffer_scale: int = 4 if utils.is_desktop() else 18
+        zbuffer_scale: int = 6 if utils.is_desktop() else 18
         fog: float = 1.25 #the strength of the fog
         max_triangles: int = 1950
         shading: bool = True
@@ -33,6 +33,7 @@ class Game():
         cmu_quality: float = 0.125 #for CMU WEB only
         fps_target: int = 30
         min_quality: float = 0.25 if utils.is_desktop() else 0.01
+        shadows: bool = utils.is_desktop()
 
     def __init__(self):
         global utils
@@ -145,6 +146,10 @@ class Game():
     
     def remove_triangle(self, triangle: "Triangle | None"):
         if triangle in self.triangles:
+            if hasattr(triangle, "_shape"):
+                self.polygon_factory.free(triangle._shape)
+                triangle._shape.visible = False
+                del triangle._shape
             self.triangles.remove(triangle)
             self._triangle_count -= 1
     
@@ -160,7 +165,7 @@ class Game():
         sorted_triangles = sorted(
             self.triangles,
             reverse=True,
-            key=lambda tri: tri.z + (tri._sort_id * 1e-6) # type: ignore
+            key=lambda tri: tri.z + (tri._sort_id * 1e-6) + 4*(tri.opacity == 100) # type: ignore
         )
 
         for tri in sorted_triangles:
