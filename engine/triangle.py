@@ -1,3 +1,4 @@
+from engine.color_utils import set_brightness
 from engine.extras import cached_property
 from typing import TYPE_CHECKING
 
@@ -18,7 +19,6 @@ class Triangle():
         position: Vector3,
         *points: Vector3,
         fill=rgb(255,255,255),
-        texture: str | None = None,
         pretransformed: bool = False,
         render_lights: bool = True,
         skip_near_clip: bool = False,
@@ -26,9 +26,12 @@ class Triangle():
         render_shadow: bool = True
     ):
         
-        #validation
-        if len(points) != 3:
-            return
+        # input validation
+        assert len(points) == 3
+        assert isinstance(position, Vector3)
+        assert all([isinstance(p, Vector3) for p in points])
+        assert isinstance(opacity, int) and 0 <= opacity <= 100
+
         self.shadow = None
         self.points: list[Vector3] = [*points]
         self.position = position
@@ -52,7 +55,7 @@ class Triangle():
 
         clipped = self.get_clip(skip_near_clip)
         if not clipped:
-            existing_game.remove_triangle(self.shadow)
+            self.delete()
             return
 
         if len(clipped) > 1:
@@ -62,10 +65,9 @@ class Triangle():
             Triangle(
                 Vector3.zero(),
                 *second,
-                fill=self._real_fill,
-                texture=texture,
+                fill=self.fill,
                 pretransformed=True,
-                render_lights=False,
+                render_lights=True,
                 skip_near_clip=True,
                 opacity=opacity,
                 render_shadow=False
@@ -74,10 +76,7 @@ class Triangle():
         self.points = list(clipped[0])
         self._count = len(self.points)
 
-        #check offscreen
-       # if self.offscreen:
-        #    self.delete()
-        #    return
+
         
         #calculate z and screens
         self.z = self.get_z()
@@ -86,16 +85,19 @@ class Triangle():
     
 
         existing_game.add_triangle(self)
-        if self.is_too_small():
-            self.delete()
-            return
-        
-        if self.is_foggy():
+
+        if not self.is_valid():
             self.delete()
             return
        
        
-       
+    def is_valid(self) -> bool:
+        statements = [
+            self.is_too_small(),
+            self.is_foggy(),
+            self.is_offscreen()
+        ]
+        return not any(statements)
     def get_z(self) -> float:
         return sum(_.z for _ in self.points) / self._count
         
@@ -119,14 +121,11 @@ class Triangle():
     
         return v
     
-    @property
-    def offscreen(self) -> bool:
+
+    def is_offscreen(self) -> bool:
         if all(_.offscreen for _ in self.points) and (self.physical_area < 1):
             return True
         
-        if any(_.offscreen for _ in self.points):
-            #existing_game.remove_triangle(self.shadow)
-            return True
         return False
         
     
@@ -140,7 +139,7 @@ class Triangle():
 
     
     def get_fill(self, start: "RGB") -> "RGB":
-        tmp_fill = start.darker().darker().darker().darker().darker()
+        tmp_fill = set_brightness(start, 0.8)
         world_points = self.world_points
         world_center = self.world_center
         if existing_game.configuration.shading:
@@ -158,18 +157,12 @@ class Triangle():
                 brightness += diffuse * light.brightness * attenuation
 
             brightness = max(0.0, min(1.0, brightness))
-
-            tmp_fill = rgb(
-                min(255, start.red * brightness),
-                min(255, start.green * brightness),
-                min(255, start.blue * brightness)
-            )
+            tmp_fill = set_brightness(start, brightness)
             
         return tmp_fill
         
     
     def render_shadow(self):
-        _lowest_y = min([p.y for p in self.points])
         _p = [
             Vector3.new(p.x, -50, p.z) for p in self.points
         ]

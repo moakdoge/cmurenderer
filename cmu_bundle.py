@@ -441,6 +441,10 @@ class Triangle():
         if self.is_foggy():
             self.delete()
             return
+        
+        if self.offscreen:
+            self.delete()
+            return
        
        
        
@@ -697,6 +701,7 @@ class CMUtils():
     def make_global(self, name=None, desktop: bool = True, web: bool = True):
         def decorator(func):
             def wrapper(*args, **kwargs):
+
                 return CMUtils._game.__class__.__dict__[func.__name__](
                     CMUtils._game,
                     *args,
