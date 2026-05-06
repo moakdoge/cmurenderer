@@ -22,7 +22,9 @@ if TYPE_CHECKING:
 class Game():
     class GameConfiguration():
         wireframe: bool = False
+        near_clip: bool = True
         debug: bool = True
+        min_physical_area_cull: int = 50_000
         backface_cull: bool = False
         zbuffer: bool = True
         zbuffer_scale: int = 6 if utils.is_desktop() else 18

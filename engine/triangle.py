@@ -1,5 +1,5 @@
+from engine.extras import cached_property
 from typing import TYPE_CHECKING
-
 
 from engine.light import Light, lights
 from engine.vector3 import Vector3
@@ -7,6 +7,7 @@ from cmu_graphics import *
 if TYPE_CHECKING:
     from engine._game import Game
     from cmu_graphics.shape_logic import RGB
+    from engine.camera import Camera
     
 
 existing_game: "Game"
@@ -34,20 +35,22 @@ class Triangle():
         self.fill = fill
         self._count = len(points)
         self._real_fill= fill
+        self.opacity = opacity
+        
         self.fogged = False
 
 
         if render_lights:
             self._real_fill = self.get_fill(fill)
+        
+        if render_shadow:
+            self.render_shadow()
+            
         if not pretransformed:
-            # calculate camera offset and rotate into view space
-            for i, p in enumerate(self.points):
-                self.points[i] = p + position - existing_game.camera.position
-                self.points[i] = self.points[i].rotate(
-                    Vector3.new(existing_game.camera.pitch, existing_game.camera.yaw, 0)
-                )
+            self.transform(existing_game.camera)
+            
 
-        clipped = [tuple(self.points)] if skip_near_clip else self.clip_near()
+        clipped = self.get_clip(skip_near_clip)
         if not clipped:
             existing_game.remove_triangle(self.shadow)
             return
@@ -70,56 +73,72 @@ class Triangle():
 
         self.points = list(clipped[0])
         self._count = len(self.points)
-        
-        
-
-        min_physical_area_cull = 50000
 
         #check offscreen
-        if all(_.offscreen for _ in self.points) and (self.physical_area < min_physical_area_cull):
-            existing_game.remove_triangle(self.shadow)
-            return
+       # if self.offscreen:
+        #    self.delete()
+        #    return
         
-        if any(_.offscreen for _ in self.points):
-            existing_game.remove_triangle(self.shadow)
-
         #calculate z and screens
-        self.z = sum(_.z for _ in self.points) / self._count
-        screens: list[tuple[int, int]] = [_.screen for _ in self.points]
-        self.screen = screens
-        
-
-        
-        #check hidden
-        if None in screens:
-            self.screen = screens
-
-        self.extracted = [list(sublist) for sublist in self.screen]
-        lowest = 140 * existing_game.configuration.fog
-        if (self.screen_area < lowest) and (self.physical_area < min_physical_area_cull):
-            existing_game.remove_triangle(self.shadow)
-            return
-        
-
-
-        self.opacity = opacity
-        if existing_game.configuration.backface_cull:
-            p1, p2, p3 = tuple(self.points)
-            normal = (p2 - p1).cross(p3 - p1).normal
-            view_dir = (-self.center).normal
-            if normal.dot(view_dir) <= 0:
-                existing_game.remove_triangle(self.shadow)
-                return
+        self.z = self.get_z()
+        self.screen = self.get_screens()
+        self.extracted = self.get_extracted()
+    
 
         existing_game.add_triangle(self)
+        if self.is_too_small():
+            self.delete()
+            return
+        
+        if self.is_foggy():
+            self.delete()
+            return
+       
+       
+       
+    def get_z(self) -> float:
+        return sum(_.z for _ in self.points) / self._count
+        
+    def get_screens(self) -> list[tuple[int, int]]:
+        return [_.screen for _ in self.points]
+    
+    def get_extracted(self):
+        return [list(sublist) for sublist in self.screen]
+    
+    def is_foggy(self) -> bool:
+        lowest = 140 * existing_game.configuration.fog
+        v = (self.screen_area < lowest) and (self.physical_area < existing_game.configuration.min_physical_area_cull)
+        return v
+    
+    def is_too_small(self) -> bool:
         centScr = self.center.screen
         self.average_screen_dist = max(distance(_[0],_[1], centScr[0], centScr[1]) for _ in self.screen)
         
         ar = self.area(*self.screen)
-        if (ar < (50 / existing_game.configuration.quality)) and (self.physical_area < min_physical_area_cull):
-            existing_game.remove_triangle(self.shadow)
-            return
+        v=(ar < (50 / existing_game.configuration.quality)) and (self.physical_area < existing_game.configuration.min_physical_area_cull)
+    
+        return v
+    
+    @property
+    def offscreen(self) -> bool:
+        if all(_.offscreen for _ in self.points) and (self.physical_area < 1):
+            return True
         
+        if any(_.offscreen for _ in self.points):
+            #existing_game.remove_triangle(self.shadow)
+            return True
+        return False
+        
+    
+    def transform(self, camera: "Camera"):
+        # calculate camera offset and rotate into view space
+        for i, p in enumerate(self.points):
+            self.points[i] = p + self.position - camera.position
+            self.points[i] = self.points[i].rotate(
+                Vector3.new(camera.pitch, camera.yaw, 0)
+            )
+
+    
     def get_fill(self, start: "RGB") -> "RGB":
         tmp_fill = start.darker().darker().darker().darker().darker()
         world_points = self.world_points
@@ -178,6 +197,9 @@ class Triangle():
             p + self.position
             for p in self.points
         ]
+        
+    def get_clip(self, skip: bool = False):
+        return [tuple(self.points)] if skip else self.clip_near()
         
         
     @property
@@ -248,36 +270,13 @@ class Triangle():
             (b, bc, ac),
         ]
     def delete(self):
+        if hasattr(self, "shadow"):
+            existing_game.remove_triangle(self.shadow)        
         if hasattr(self, "_shape"):
             existing_game.polygon_factory.free(self._shape)
             self._shape.visible = False
             del self._shape
         existing_game.remove_triangle(self)
-
-    def get_bounding_box(self): 
-        min_x = rounded(min(self.screen[0][0], self.screen[1][0], self.screen[2][0]))
-        max_x = rounded(max(self.screen[0][0], self.screen[1][0], self.screen[2][0]))
-        min_y = rounded(min(self.screen[0][1], self.screen[1][1], self.screen[2][1]))
-        max_y = rounded(max(self.screen[0][1], self.screen[1][1], self.screen[2][1])) 
-        return min_x, min_y, max_x, max_y
-    def is_covered(self):
-        success = 0
-        total_points = self._count
-        dis = 250 ** 2
-        for _t in existing_game.triangles:
-            if _t.z < self.z:
-                continue
-
-            left, bottom, right, top = _t.get_bounding_box()
-            inside_points = 0
-            for x, y in self.screen:
-                if left < x < right and bottom < y < top:
-                    inside_points += 1
-
-            if inside_points / total_points >= 0.5:
-                return True 
-        
-        return False
 
 
     def area(self, p1, p2, p3):
@@ -285,11 +284,12 @@ class Triangle():
             (p2[0] - p1[0]) * (p3[1] - p1[1])
         - (p2[1] - p1[1]) * (p3[0] - p1[0])
         )
+    
     @property
     def rendered(self):
         return self._shape
 
-    @property
+    @cached_property
     def screen_area(self):
         return self.area(*self.extracted)
     
