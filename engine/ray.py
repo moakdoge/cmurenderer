@@ -9,10 +9,15 @@ class Ray:
     direction: "Vector3"
     distance: float = float("inf")
 
-    def intersects(self, tri: Triangle) -> Triangle | None:
+    def intersects(self, tri: Triangle) -> float | None:
         EPS = 1e-6
 
-        p1, p2, p3 = tri.points
+        p1, p2, p3 = tri._og_points
+        
+        p1 = p1 + tri.position
+        p2 = p2 + tri.position
+        p3 = p3 + tri.position
+
         edge1 = p2 - p1
         edge2 = p3 - p1
 
@@ -37,14 +42,10 @@ class Ray:
 
         t = f * edge2.dot(q)
 
-        if t <= EPS:
-            return None
-        
-        if t >= self.distance:
+        if t <= EPS or t >= self.distance:
             return None
 
-        return t # type: ignore
-    
+        return t
     def cast(self) -> Triangle | None: 
 
         for tri in game.triangles:

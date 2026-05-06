@@ -31,6 +31,7 @@ class Game():
         utils.register_game(self)
         self.camera = Camera()
         self.player = Player(self.camera)
+        self.player._game_parent = self
         self.configuration: "GameConfiguration"
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
@@ -114,6 +115,7 @@ class Game():
             
         if "x" == key:
             self.utils.lock_mouse()
+            
     @utils.make_global()
     def onStep(self):
         _dt = time.perf_counter() - self._last_dt

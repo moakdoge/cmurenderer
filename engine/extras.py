@@ -87,7 +87,7 @@ T = TypeVar("T")
 
 
 @dataclass_transform()
-def dataclass(frozen: bool = False, slots: bool = False, repr: bool = True):
+def dataclass(init: bool = True, frozen: bool = False, slots: bool = False, repr: bool = True):
     def decorator(cls):
         nonlocal frozen, slots, repr
         
@@ -115,7 +115,8 @@ def dataclass(frozen: bool = False, slots: bool = False, repr: bool = True):
                     tags = [
                         "[FROZEN]" if frozen else "",
                         "[SLOTS]" if slots else "",
-                        "[REPR]" if repr else ""
+                        "[REPR]" if repr else "",
+                        "[INIT]" if init else "",
                     ]
                     for k,v in annotations.items():
                         pretty.append(f"{k}: {v.__name__} = {defaults[k]}" if k in defaults else f"{k}: {getattr(v, '__name__', v)}")
@@ -162,7 +163,8 @@ def dataclass(frozen: bool = False, slots: bool = False, repr: bool = True):
             )
             return f"{cls.__name__}({values})"
 
-        cls.__init__ = __init__
+        if init:
+            cls.__init__ = __init__
         if repr:
             cls.__repr__ = __repr__
         if frozen:

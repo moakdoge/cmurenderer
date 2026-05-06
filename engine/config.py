@@ -17,8 +17,10 @@ class PerformanceConfiguration:
     shading: bool = True
     quality: float = 0.8
     shadows: bool = True
+    collisions: bool = True
 
-    
+
+
 
 @dataclass(slots=True)
 class GameConfiguration:
@@ -28,7 +30,8 @@ class GameConfiguration:
         max_triangles=400,
         shading=False,
         quality=0.25,
-        shadows=False
+        shadows=False,
+        collisions=False
     )
     desktop: PerformanceConfiguration = PerformanceConfiguration()
     

@@ -23,6 +23,15 @@ class Camera():
                 -math.sin(self.pitch),
                 math.cos(self.yaw) * math.cos(self.pitch)
                 ).normal
+        
+    @property
+    def ddir(self):
+        yaw, pitch = self.yaw, self.pitch
+        return Vector3(
+            -math.sin(yaw) * math.cos(pitch),
+            -math.sin(pitch),
+            math.cos(yaw) * math.cos(pitch)
+        ).normal
     def __setattr__(self, name: str, value) -> None:
         if name == "pitch":
             value = max(math.radians(-90), min(math.radians(90), value))

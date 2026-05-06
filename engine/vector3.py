@@ -1,19 +1,17 @@
 import math
 
 from engine._types import Vector3Number
+from engine.extras import dataclass
 
 
 _ZERO_VECTOR: "Vector3 | None" = None
+
+
+@dataclass(slots=True)
 class Vector3():
-    __slots__ = ("x", "y", "z")
-    def __init__(self, x: Vector3Number, y: Vector3Number, z: Vector3Number) -> None:
-        assert isinstance(x, (int, float))
-        assert isinstance(y, (int, float))
-        assert isinstance(z, (int, float))
-        
-        self.x: Vector3Number=x
-        self.y: Vector3Number=y
-        self.z: Vector3Number=z
+    x: int | float
+    y: int | float
+    z: int | float
         
     
     @classmethod
@@ -144,10 +142,16 @@ class Vector3():
         return Vector3(x, y, self.z)
 
     def rotate(self, angle: "Vector3"):
-        m = self.rotate_y(angle.y)
-        m = m.rotate_x(angle.x)
-        m = m.rotate_z(angle.z)
-        return m
+        x, y, z = self.x, self.y, self.z
+
+        sx, cx = self._qscos(angle.x)
+        sy, cy = self._qscos(angle.y)
+        sz, cz = self._qscos(angle.z)
+        x, z = x * cy + z * sy, -x * sy + z * cy
+        y, z = y * cx - z * sx, y * sx + z * cx
+        x, y = x * cz - y * sz, x * sz + y * cz
+
+        return Vector3(x, y, z)
     def rotate_xyz(self, angle):
         sin_theta, cos_theta = self._qscos(angle)
 

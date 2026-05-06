@@ -1,5 +1,5 @@
 from engine.color_utils import set_brightness
-from engine.extras import cached_property
+from engine.extras import cached_property, dataclass
 from typing import TYPE_CHECKING
 
 from engine.light import Light, lights
@@ -12,8 +12,13 @@ if TYPE_CHECKING:
     
 
 existing_game: "Game"
-
 class Triangle():
+    __slots__ = (
+        "shadow", "points", "position", "fill", "_count", "_real_fill",
+        "opacity", "fogged", "z", "screen", "extracted", "_shape",
+        "_sort_id", "average_screen_dist", "_og_points"
+        # no "__dict__"
+    )
     def __init__(
         self,
         position: Vector3,
@@ -33,6 +38,7 @@ class Triangle():
         assert isinstance(opacity, int) and 0 <= opacity <= 100
 
         self.shadow = None
+        self._og_points: list[Vector3] = [*points]
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
@@ -282,7 +288,7 @@ class Triangle():
     def rendered(self):
         return self._shape
 
-    @cached_property
+    @property
     def screen_area(self):
         return self.area(*self.extracted)
     
