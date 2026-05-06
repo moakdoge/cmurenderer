@@ -6,6 +6,9 @@ from engine.vector3 import Vector3
 from cmu_graphics import *
 if TYPE_CHECKING:
     from engine._game import Game
+    from cmu_graphics.shape_logic import RGB
+    
+
 existing_game: "Game"
 
 class Triangle():
@@ -21,6 +24,8 @@ class Triangle():
         opacity: int = 100,
         render_shadow: bool = True
     ):
+        
+        #validation
         if len(points) != 3:
             return
         self.shadow = None
@@ -30,61 +35,10 @@ class Triangle():
         self._count = len(points)
         self._real_fill= fill
         self.fogged = False
-        self.center = Vector3.new(
-            sum(_.x for _ in self.points) / self._count,
-            sum(_.y for _ in self.points) / self._count,
-            sum(_.z for _ in self.points) / self._count
-        )
-        world_points = [
-            p + position
-            for p in self.points
-        ]
 
-        world_center = Vector3.new(
-            sum(p.x for p in world_points) / len(world_points),
-            sum(p.y for p in world_points) / len(world_points),
-            sum(p.z for p in world_points) / len(world_points),
-        )
+
         if render_lights:
-            self._real_fill = fill.darker().darker().darker().darker().darker()
-            if render_lights and existing_game.configuration.shading:
-                face_normal = (world_points[1] - world_points[0]).cross(
-                    world_points[2] - world_points[0]
-                ).normal
-                ambient = 0.35
-                brightness = ambient
-
-                for light in lights:
-                    light_dir = (light.position - world_center).normal
-                    diffuse = max(0.0, face_normal.dot(light_dir))
-                    dist = light.position.distance(world_center)
-                    attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
-                    brightness += diffuse * light.brightness * attenuation
-
-                brightness = max(0.0, min(1.0, brightness))
-
-                self._real_fill = rgb(
-                    min(255, self._real_fill.red * brightness),
-                    min(255, self._real_fill.green * brightness),
-                    min(255, self._real_fill.blue * brightness)
-                )
-                
-                
-                
-                if render_shadow and existing_game.configuration.shadows:
-                    _lowest_y = min([p.y for p in self.points])
-                    _p = [
-                        Vector3.new(p.x, -50, p.z) for p in self.points
-                    ]
-                    self.shadow = Triangle(
-                        self.position - Vector3.new(0, 50, 0),
-                        *_p,
-                        fill=rgb(0,0,0),
-                        render_lights=False,
-                        skip_near_clip=False,
-                        opacity=25     ,
-                        render_shadow=False  
-                    )
+            self._real_fill = self.get_fill(fill)
         if not pretransformed:
             # calculate camera offset and rotate into view space
             for i, p in enumerate(self.points):
@@ -165,6 +119,76 @@ class Triangle():
         if (ar < (50 / existing_game.configuration.quality)) and (self.physical_area < min_physical_area_cull):
             existing_game.remove_triangle(self.shadow)
             return
+        
+    def get_fill(self, start: "RGB") -> "RGB":
+        tmp_fill = start.darker().darker().darker().darker().darker()
+        world_points = self.world_points
+        world_center = self.world_center
+        if existing_game.configuration.shading:
+            face_normal = (world_points[1] - world_points[0]).cross(
+                world_points[2] - world_points[0]
+            ).normal
+            ambient = 0.35
+            brightness = ambient
+
+            for light in lights:
+                light_dir = (light.position - world_center).normal
+                diffuse = max(0.0, face_normal.dot(light_dir))
+                dist = light.position.distance(world_center)
+                attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
+                brightness += diffuse * light.brightness * attenuation
+
+            brightness = max(0.0, min(1.0, brightness))
+
+            tmp_fill = rgb(
+                min(255, start.red * brightness),
+                min(255, start.green * brightness),
+                min(255, start.blue * brightness)
+            )
+            
+        return tmp_fill
+        
+    
+    def render_shadow(self):
+        _lowest_y = min([p.y for p in self.points])
+        _p = [
+            Vector3.new(p.x, -50, p.z) for p in self.points
+        ]
+        self.shadow = Triangle(
+            self.position - Vector3.new(0, 50, 0),
+            *_p,
+            fill=rgb(0,0,0),
+            render_lights=False,
+            skip_near_clip=False,
+            opacity=25     ,
+            render_shadow=False  
+        )
+        
+    @property
+    def center(self):
+        return Vector3.new(
+            sum(_.x for _ in self.points) / self._count,
+            sum(_.y for _ in self.points) / self._count,
+            sum(_.z for _ in self.points) / self._count
+        )
+        
+    @property
+    def world_points(self):
+        return [
+            p + self.position
+            for p in self.points
+        ]
+        
+        
+    @property
+    def world_center(self):
+        world_points = self.world_points
+        return Vector3.new(
+            sum(p.x for p in world_points) / len(world_points),
+            sum(p.y for p in world_points) / len(world_points),
+            sum(p.z for p in world_points) / len(world_points),
+        )
+        
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
         if self._shape.pointList != self.extracted:
