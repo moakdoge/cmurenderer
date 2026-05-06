@@ -23,6 +23,7 @@ class Triangle():
         self,
         position: Vector3,
         *points: Vector3,
+        rotate: Vector3 | None = None,
         fill=rgb(255,255,255),
         pretransformed: bool = False,
         render_lights: bool = True,
@@ -49,13 +50,17 @@ class Triangle():
         self.fogged = False
 
 
-        if render_lights:
+        if render_lights and existing_game.configuration.current.shading:
             self._real_fill = self.get_fill(fill)
         
-        if render_shadow:
+        
+        if render_shadow and existing_game.configuration.current.shadows:
             self.render_shadow()
             
+            
         if not pretransformed:
+            if rotate is not None:
+                self.points = self.rotate_points(rotate) 
             self.transform(existing_game.camera)
             
 
@@ -96,7 +101,11 @@ class Triangle():
             self.delete()
             return
        
-       
+    
+    def rotate_points(self, mat: Vector3):
+        return [
+            p.rotate(mat) for p in self.points
+        ]
     def is_valid(self) -> bool:
         statements = [
             self.is_too_small(),
@@ -105,7 +114,10 @@ class Triangle():
         ]
         return not any(statements)
     def get_z(self) -> float:
-        return sum(_.z for _ in self.points) / self._count
+        z = max(_.z for _ in self.points)
+        if self.opacity < 100:
+            z -= 0.01
+        return z
         
     def get_screens(self) -> list[tuple[int, int]]:
         return [_.screen for _ in self.points]
@@ -157,7 +169,7 @@ class Triangle():
 
             for light in lights:
                 light_dir = (light.position - world_center).normal
-                diffuse = max(0.0, face_normal.dot(light_dir))
+                diffuse = abs(face_normal.dot(light_dir))
                 dist = light.position.distance(world_center)
                 attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
                 brightness += diffuse * light.brightness * attenuation
@@ -212,22 +224,17 @@ class Triangle():
         
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
-        if self._shape.pointList != self.extracted:
-            self._shape.pointList = self.extracted
-        #self._shape.pointList = self.extracted
-        if self._shape.fill != self._real_fill:
-            self._shape.fill = self._real_fill
-        try:
-            if getattr(self._shape, "zindex", -1) != self.z:
-                self._shape.zindex = self.z
-        except Exception as e:    
-            self._shape.zindex = self.z
+        self._shape.pointList = self.extracted
+        self._shape.fill = self._real_fill
+        self._shape.zindex = self.z
         if self.opacity == 100:
             self._shape.border = self._real_fill
         else:
             self._shape.border = None
+            
         if existing_game.configuration.debug.wireframe:
             self._shape.fill = None
+            
         self._shape.opacity = self.opacity
         self._shape.visible = True
         self._sort_id = 1 if self.opacity == 100 else -9
@@ -274,7 +281,7 @@ class Triangle():
         if hasattr(self, "_shape"):
             existing_game.polygon_factory.free(self._shape)
             self._shape.visible = False
-            del self._shape
+            #del self._shape
         existing_game.remove_triangle(self)
 
 

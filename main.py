@@ -39,7 +39,7 @@ def step(dt):
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
-    #exCube.rotation += Vector3.new(0.025,0.025,0.025)
+    exCube.rotation += Vector3.new(0.025,0.025,0.025)
 
 
 game.run()

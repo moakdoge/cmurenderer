@@ -9,6 +9,189 @@ from typing import TypeAlias
 Vector3Number: TypeAlias = float | int
 
 
+# ===== engine/extras.py =====
+
+from __future__ import annotations
+
+from types import GenericAlias
+from typing import Any, Callable, Generic, Type, TypeVar, dataclass_transform, overload
+
+T = TypeVar("T")
+R = TypeVar("R")
+
+_NOT_FOUND = object()
+
+
+class cached_property(Generic[T, R]):
+    func: Callable[[T], R]
+    attrname: str | None
+    __doc__: str | None
+    __module__: str
+
+    def __init__(self, func: Callable[[T], R]) -> None:
+        self.func = func
+        self.attrname = None
+        self.__doc__ = func.__doc__
+        self.__module__ = func.__module__
+
+    def __set_name__(self, owner: type[T], name: str) -> None:
+        if self.attrname is None:
+            self.attrname = name
+        elif name != self.attrname:
+            raise TypeError(
+                "Cannot assign the same cached_property to two different names "
+                f"({self.attrname!r} and {name!r})."
+            )
+
+    @overload
+    def __get__(self, instance: None, owner: type[T] | None = None) -> "cached_property[T, R]":
+        ...
+
+    @overload
+    def __get__(self, instance: T, owner: type[T] | None = None) -> R:
+        ...
+
+    def __get__(
+        self,
+        instance: T | None,
+        owner: type[T] | None = None,
+    ) -> "R | cached_property[T, R]":
+        if instance is None:
+            return self
+
+        if self.attrname is None:
+            raise TypeError(
+                "Cannot use cached_property instance without calling __set_name__ on it."
+            )
+
+        try:
+            cache: dict[str, Any] = instance.__dict__  # type: ignore[attr-defined]
+        except AttributeError:
+            msg = (
+                f"No '__dict__' attribute on {type(instance).__name__!r} "
+                f"instance to cache {self.attrname!r} property."
+            )
+            raise TypeError(msg) from None
+
+        val = cache.get(self.attrname, _NOT_FOUND)
+
+        if val is _NOT_FOUND:
+            val = self.func(instance)
+            try:
+                cache[self.attrname] = val
+            except TypeError:
+                msg = (
+                    f"The '__dict__' attribute on {type(instance).__name__!r} instance "
+                    f"does not support item assignment for caching "
+                    f"{self.attrname!r} property."
+                )
+                raise TypeError(msg) from None
+
+        return val
+
+    __class_getitem__ = classmethod(GenericAlias)
+    
+
+from typing import TypeVar, Type, Callable, Any
+
+T = TypeVar("T")
+
+
+
+
+@dataclass_transform()
+def dataclass(init: bool = True, frozen: bool = False, slots: bool = False, repr: bool = True):
+    def decorator(cls):
+        nonlocal frozen, slots, repr
+        
+        annotations = getattr(cls, "__annotations__", {})
+        fields = tuple(annotations.keys())
+        defaults = {}
+        if slots:
+            namespace = dict(cls.__dict__)
+
+            namespace.pop("__dict__", None)
+            namespace.pop("__weakref__", None)
+
+            # Important: remove field defaults before creating slots,
+            # because slot names conflict with class variables.
+            for name in fields:
+                if name in namespace:
+                    defaults[name] = namespace.pop(name)
+                    
+            f=list(fields)
+            f.append("_frozen")
+            namespace["__slots__"] = tuple(f)
+            class DataMeta(type):
+                def __repr__(cls):
+                    pretty = []
+                    tags = [
+                        "[FROZEN]" if frozen else "",
+                        "[SLOTS]" if slots else "",
+                        "[REPR]" if repr else "",
+                        "[INIT]" if init else "",
+                    ]
+                    for k,v in annotations.items():
+                        pretty.append(f"{k}: {v.__name__} = {defaults[k]}" if k in defaults else f"{k}: {getattr(v, '__name__', v)}")
+                    return f"<dataclass {cls.__name__}({','.join(pretty)}) {' '.join(tags)}>"
+                
+            if repr:
+                k = DataMeta
+            else:
+                k = type
+            new_cls = k(cls.__name__, cls.__bases__, namespace, )
+            new_cls.__module__ = cls.__module__
+            new_cls.__qualname__ = cls.__qualname__
+
+
+            cls = new_cls
+        annotations = getattr(cls, "__annotations__", {})
+
+        fields = list(annotations.keys())
+
+        def __init__(self, *args, **kwargs):
+            for name, value in zip(fields, args):
+                setattr(self, name, value)
+            for name in fields[len(args):]:
+                if name in kwargs:
+                    setattr(self, name, kwargs[name])
+                elif hasattr(cls, name):
+                    if slots:
+                        setattr(self, name, defaults[name])
+                    else:
+                        setattr(self, name, getattr(cls, name))
+                else:
+                    raise TypeError(f"Missing required argument: {name}")
+
+            
+            setattr(self, "_frozen", True)
+            if hasattr(self, "__post_init__") and callable(getattr(self, "__post_init__", None)):
+                self.__post_init__()
+            
+                
+        def __repr__(self):
+            values = ", ".join(
+                f"{name}={getattr(self, name)!r}"
+                for name in fields
+            )
+            return f"{cls.__name__}({values})"
+
+        if init:
+            cls.__init__ = __init__
+        if repr:
+            cls.__repr__ = __repr__
+        if frozen:
+            def __setattr__(self, k, v):
+                if hasattr(self, "_frozen"):
+                    raise AttributeError(f"{self.__class__.__name__} is frozen!")
+                object.__setattr__(self, k, v)
+            cls.__setattr__ = __setattr__
+
+
+        return cls
+    return decorator
+
+
 # ===== engine/vector3.py =====
 
 import math
@@ -16,16 +199,13 @@ import math
 
 
 _ZERO_VECTOR: "Vector3 | None" = None
+
+
+@dataclass(slots=True)
 class Vector3():
-    __slots__ = ("x", "y", "z")
-    def __init__(self, x: Vector3Number, y: Vector3Number, z: Vector3Number) -> None:
-        assert isinstance(x, (int, float))
-        assert isinstance(y, (int, float))
-        assert isinstance(z, (int, float))
-        
-        self.x: Vector3Number=x
-        self.y: Vector3Number=y
-        self.z: Vector3Number=z
+    x: int | float
+    y: int | float
+    z: int | float
         
     
     @classmethod
@@ -156,10 +336,16 @@ class Vector3():
         return Vector3(x, y, self.z)
 
     def rotate(self, angle: "Vector3"):
-        m = self.rotate_y(angle.y)
-        m = m.rotate_x(angle.x)
-        m = m.rotate_z(angle.z)
-        return m
+        x, y, z = self.x, self.y, self.z
+
+        sx, cx = self._qscos(angle.x)
+        sy, cy = self._qscos(angle.y)
+        sz, cz = self._qscos(angle.z)
+        x, z = x * cy + z * sy, -x * sy + z * cy
+        y, z = y * cx - z * sx, y * sx + z * cx
+        x, y = x * cz - y * sz, x * sz + y * cz
+
+        return Vector3(x, y, z)
     def rotate_xyz(self, angle):
         sin_theta, cos_theta = self._qscos(angle)
 
@@ -227,7 +413,7 @@ class Camera():
         self.yaw: float = 0
         self.roll: float = 0
         self._x = 0
-        self.light = Light(self.position, self.direction)
+        self.light = Light(self.position, self.direction, brightness=60)
         pass
     def tick(self):
         self.light.position = self.position
@@ -239,6 +425,15 @@ class Camera():
                 -math.sin(self.pitch),
                 math.cos(self.yaw) * math.cos(self.pitch)
                 ).normal
+        
+    @property
+    def ddir(self):
+        yaw, pitch = self.yaw, self.pitch
+        return Vector3(
+            -math.sin(yaw) * math.cos(pitch),
+            -math.sin(pitch),
+            math.cos(yaw) * math.cos(pitch)
+        ).normal
     def __setattr__(self, name: str, value) -> None:
         if name == "pitch":
             value = max(math.radians(-90), min(math.radians(90), value))
@@ -251,13 +446,21 @@ class Camera():
 
 # ===== engine/player.py =====
 
+import math
+from typing import TYPE_CHECKING
+
 from cmu_graphics import app
+
+if TYPE_CHECKING:
+    from engine._game import Game
+
 class Player():
     def __init__(self, camera: Camera) -> None:
         self.attached_camera = camera
         self.position: Vector3 = Vector3.zero()
         self.velocity: Vector3 = Vector3.new(0,0,0)
         self.max_health = 100
+        self._game_parent: "Game"
         self.health = 100
         
     def __setattr__(self, name: str, value) -> None:
@@ -267,9 +470,40 @@ class Player():
     def on_floor(self):
         return (self.position.y <= 0)
     
+    def check_collision(self, vel: Vector3) -> bool:
+        from engine.ray import Ray
+
+        dst = math.hypot(vel.x, vel.y, vel.z)
+        if dst <= 0:
+            return False
+
+        dir = Vector3(
+            vel.x / dst,
+            vel.y / dst,
+            vel.z / dst,
+        )
+
+        r = Ray(self.position, dir, dst*2)
+        return r.cast() is not None
+    
     def update(self):
-        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0:
-            self.position += (self.velocity*app.dt)
+        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0 and self._game_parent.configuration.current.collisions:
+            move = self.velocity * app.dt
+            for axis_move in (
+                Vector3(move.x, 0, 0),
+                Vector3(0, move.y, 0),
+                Vector3(0, 0, move.z),
+            ):
+                if axis_move.magnitude <= 0:
+                    continue
+
+                if not self.check_collision(axis_move):
+                    self.position += axis_move
+                else:
+                    if axis_move.x: self.velocity.x = 0
+                    if axis_move.y: self.velocity.y = 0
+                    if axis_move.z: self.velocity.z = 0
+
         if not self.on_floor():
             self.velocity -= Vector3.new(0,1.75,0)
         else:
@@ -304,187 +538,6 @@ def set_brightness(color: "RGB", brightness: float) -> "RGB":
     )
 
 
-# ===== engine/extras.py =====
-
-from __future__ import annotations
-
-from types import GenericAlias
-from typing import Any, Callable, Generic, Type, TypeVar, dataclass_transform, overload
-
-T = TypeVar("T")
-R = TypeVar("R")
-
-_NOT_FOUND = object()
-
-
-class cached_property(Generic[T, R]):
-    func: Callable[[T], R]
-    attrname: str | None
-    __doc__: str | None
-    __module__: str
-
-    def __init__(self, func: Callable[[T], R]) -> None:
-        self.func = func
-        self.attrname = None
-        self.__doc__ = func.__doc__
-        self.__module__ = func.__module__
-
-    def __set_name__(self, owner: type[T], name: str) -> None:
-        if self.attrname is None:
-            self.attrname = name
-        elif name != self.attrname:
-            raise TypeError(
-                "Cannot assign the same cached_property to two different names "
-                f"({self.attrname!r} and {name!r})."
-            )
-
-    @overload
-    def __get__(self, instance: None, owner: type[T] | None = None) -> "cached_property[T, R]":
-        ...
-
-    @overload
-    def __get__(self, instance: T, owner: type[T] | None = None) -> R:
-        ...
-
-    def __get__(
-        self,
-        instance: T | None,
-        owner: type[T] | None = None,
-    ) -> "R | cached_property[T, R]":
-        if instance is None:
-            return self
-
-        if self.attrname is None:
-            raise TypeError(
-                "Cannot use cached_property instance without calling __set_name__ on it."
-            )
-
-        try:
-            cache: dict[str, Any] = instance.__dict__  # type: ignore[attr-defined]
-        except AttributeError:
-            msg = (
-                f"No '__dict__' attribute on {type(instance).__name__!r} "
-                f"instance to cache {self.attrname!r} property."
-            )
-            raise TypeError(msg) from None
-
-        val = cache.get(self.attrname, _NOT_FOUND)
-
-        if val is _NOT_FOUND:
-            val = self.func(instance)
-            try:
-                cache[self.attrname] = val
-            except TypeError:
-                msg = (
-                    f"The '__dict__' attribute on {type(instance).__name__!r} instance "
-                    f"does not support item assignment for caching "
-                    f"{self.attrname!r} property."
-                )
-                raise TypeError(msg) from None
-
-        return val
-
-    __class_getitem__ = classmethod(GenericAlias)
-    
-
-from typing import TypeVar, Type, Callable, Any
-
-T = TypeVar("T")
-
-
-
-
-@dataclass_transform()
-def dataclass(frozen: bool = False, slots: bool = False, repr: bool = True):
-    def decorator(cls):
-        nonlocal frozen, slots, repr
-        
-        annotations = getattr(cls, "__annotations__", {})
-        fields = tuple(annotations.keys())
-        defaults = {}
-        if slots:
-            namespace = dict(cls.__dict__)
-
-            namespace.pop("__dict__", None)
-            namespace.pop("__weakref__", None)
-
-            # Important: remove field defaults before creating slots,
-            # because slot names conflict with class variables.
-            for name in fields:
-                if name in namespace:
-                    defaults[name] = namespace.pop(name)
-                    
-            f=list(fields)
-            f.append("_frozen")
-            namespace["__slots__"] = tuple(f)
-            class DataMeta(type):
-                def __repr__(cls):
-                    pretty = []
-                    tags = [
-                        "[FROZEN]" if frozen else "",
-                        "[SLOTS]" if slots else "",
-                        "[REPR]" if repr else ""
-                    ]
-                    for k,v in annotations.items():
-                        pretty.append(f"{k}: {v.__name__} = {defaults[k]}" if k in defaults else f"{k}: {getattr(v, '__name__', v)}")
-                    return f"<dataclass {cls.__name__}({','.join(pretty)}) {' '.join(tags)}>"
-                
-            if repr:
-                k = DataMeta
-            else:
-                k = type
-            new_cls = k(cls.__name__, cls.__bases__, namespace, )
-            new_cls.__module__ = cls.__module__
-            new_cls.__qualname__ = cls.__qualname__
-
-
-            cls = new_cls
-        annotations = getattr(cls, "__annotations__", {})
-
-        fields = list(annotations.keys())
-
-        def __init__(self, *args, **kwargs):
-            for name, value in zip(fields, args):
-                setattr(self, name, value)
-            for name in fields[len(args):]:
-                if name in kwargs:
-                    setattr(self, name, kwargs[name])
-                elif hasattr(cls, name):
-                    if slots:
-                        setattr(self, name, defaults[name])
-                    else:
-                        setattr(self, name, getattr(cls, name))
-                else:
-                    raise TypeError(f"Missing required argument: {name}")
-
-            
-            setattr(self, "_frozen", True)
-            if hasattr(self, "__post_init__") and callable(getattr(self, "__post_init__", None)):
-                self.__post_init__()
-            
-                
-        def __repr__(self):
-            values = ", ".join(
-                f"{name}={getattr(self, name)!r}"
-                for name in fields
-            )
-            return f"{cls.__name__}({values})"
-
-        cls.__init__ = __init__
-        if repr:
-            cls.__repr__ = __repr__
-        if frozen:
-            def __setattr__(self, k, v):
-                if hasattr(self, "_frozen"):
-                    raise AttributeError(f"{self.__class__.__name__} is frozen!")
-                object.__setattr__(self, k, v)
-            cls.__setattr__ = __setattr__
-
-
-        return cls
-    return decorator
-
-
 # ===== engine/triangle.py =====
 
 from typing import TYPE_CHECKING
@@ -497,12 +550,18 @@ if TYPE_CHECKING:
     
 
 existing_game: "Game"
-
 class Triangle():
+    __slots__ = (
+        "shadow", "points", "position", "fill", "_count", "_real_fill",
+        "opacity", "fogged", "z", "screen", "extracted", "_shape",
+        "_sort_id", "average_screen_dist", "_og_points"
+        # no "__dict__"
+    )
     def __init__(
         self,
         position: Vector3,
         *points: Vector3,
+        rotate: Vector3 | None = None,
         fill=rgb(255,255,255),
         pretransformed: bool = False,
         render_lights: bool = True,
@@ -518,6 +577,7 @@ class Triangle():
         assert isinstance(opacity, int) and 0 <= opacity <= 100
 
         self.shadow = None
+        self._og_points: list[Vector3] = [*points]
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
@@ -528,13 +588,17 @@ class Triangle():
         self.fogged = False
 
 
-        if render_lights:
+        if render_lights and existing_game.configuration.current.shading:
             self._real_fill = self.get_fill(fill)
         
-        if render_shadow:
+        
+        if render_shadow and existing_game.configuration.current.shadows:
             self.render_shadow()
             
+            
         if not pretransformed:
+            if rotate is not None:
+                self.points = self.rotate_points(rotate) 
             self.transform(existing_game.camera)
             
 
@@ -575,7 +639,11 @@ class Triangle():
             self.delete()
             return
        
-       
+    
+    def rotate_points(self, mat: Vector3):
+        return [
+            p.rotate(mat) for p in self.points
+        ]
     def is_valid(self) -> bool:
         statements = [
             self.is_too_small(),
@@ -584,7 +652,10 @@ class Triangle():
         ]
         return not any(statements)
     def get_z(self) -> float:
-        return sum(_.z for _ in self.points) / self._count
+        z = max(_.z for _ in self.points)
+        if self.opacity < 100:
+            z -= 0.01
+        return z
         
     def get_screens(self) -> list[tuple[int, int]]:
         return [_.screen for _ in self.points]
@@ -636,7 +707,7 @@ class Triangle():
 
             for light in lights:
                 light_dir = (light.position - world_center).normal
-                diffuse = max(0.0, face_normal.dot(light_dir))
+                diffuse = abs(face_normal.dot(light_dir))
                 dist = light.position.distance(world_center)
                 attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
                 brightness += diffuse * light.brightness * attenuation
@@ -691,22 +762,17 @@ class Triangle():
         
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
-        if self._shape.pointList != self.extracted:
-            self._shape.pointList = self.extracted
-        #self._shape.pointList = self.extracted
-        if self._shape.fill != self._real_fill:
-            self._shape.fill = self._real_fill
-        try:
-            if getattr(self._shape, "zindex", -1) != self.z:
-                self._shape.zindex = self.z
-        except Exception as e:    
-            self._shape.zindex = self.z
+        self._shape.pointList = self.extracted
+        self._shape.fill = self._real_fill
+        self._shape.zindex = self.z
         if self.opacity == 100:
             self._shape.border = self._real_fill
         else:
             self._shape.border = None
+            
         if existing_game.configuration.debug.wireframe:
             self._shape.fill = None
+            
         self._shape.opacity = self.opacity
         self._shape.visible = True
         self._sort_id = 1 if self.opacity == 100 else -9
@@ -753,7 +819,7 @@ class Triangle():
         if hasattr(self, "_shape"):
             existing_game.polygon_factory.free(self._shape)
             self._shape.visible = False
-            del self._shape
+            #del self._shape
         existing_game.remove_triangle(self)
 
 
@@ -767,7 +833,7 @@ class Triangle():
     def rendered(self):
         return self._shape
 
-    @cached_property
+    @property
     def screen_area(self):
         return self.area(*self.extracted)
     
@@ -955,6 +1021,7 @@ class Game():
         utils.register_game(self)
         self.camera = Camera()
         self.player = Player(self.camera)
+        self.player._game_parent = self
         self.configuration: "GameConfiguration"
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
@@ -1038,6 +1105,7 @@ class Game():
             
         if "x" == key:
             self.utils.lock_mouse()
+            
     @utils.make_global()
     def onStep(self):
         _dt = time.perf_counter() - self._last_dt
@@ -1212,9 +1280,12 @@ class PerformanceConfiguration:
     max_triangles: int = 1950
     shading: bool = True
     quality: float = 0.8
-    shadows: bool = True
+    shadows: bool = False
+    collisions: bool = True
 
-    
+
+
+
 
 @dataclass(slots=True)
 class GameConfiguration:
@@ -1224,7 +1295,8 @@ class GameConfiguration:
         max_triangles=400,
         shading=False,
         quality=0.25,
-        shadows=False
+        shadows=False,
+        collisions=False
     )
     desktop: PerformanceConfiguration = PerformanceConfiguration()
     
@@ -1313,6 +1385,8 @@ if TYPE_CHECKING:
 
 class Cube(Base3DShape):
     def draw(self):
+        if not self.valid:
+            return
         vertices = [
             Vector3(-1, -1, -1),
             Vector3( 1, -1, -1),
@@ -1346,35 +1420,14 @@ class Cube(Base3DShape):
         for face in faces:
             scale = 1
 
-            v1 = (scaled_vertices[face[0]] * scale).rotate(self.rotation)
-            v2 = (scaled_vertices[face[1]] * scale).rotate(self.rotation)
-            v3 = (scaled_vertices[face[2]] * scale).rotate(self.rotation)
-            v4 = (scaled_vertices[face[3]] * scale).rotate(self.rotation)
+            v1 = (scaled_vertices[face[0]] * scale)#.rotate(self.rotation)
+            v2 = (scaled_vertices[face[1]] * scale)#.rotate(self.rotation)
+            v3 = (scaled_vertices[face[2]] * scale)#.rotate(self.rotation)
+            v4 = (scaled_vertices[face[3]] * scale)#.rotate(self.rotation)
 
-            normal = (v2 - v1).cross(v4 - v1).normal
-            center = (v1 + v2 + v3 + v4) * 0.25 + self.position
 
-            ambient = 0.45
-            brightness = ambient
-            if lights:
-                for light in lights:
-                    light_dir = (light.position - center).normal
-                    diffuse = max(0.0, normal.dot(light_dir))
-                    dist = light.position.distance(center)
-                    attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
-                    brightness += diffuse * light.brightness * attenuation
-            else:
-                brightness = 1.0
-
-            brightness = min(1.0, brightness)
-            face_fill = rgb(
-                int(self.fill.red * brightness),
-                int(self.fill.green * brightness),
-                int(self.fill.blue * brightness),
-            )
-
-            Triangle(self.position, v1, v2, v3, fill=self.fill)
-            Triangle(self.position, v1, v3, v4, fill=self.fill)
+            Triangle(self.position, v1, v2, v3, fill=self.fill, rotate=self.rotation)
+            Triangle(self.position, v1, v3, v4, fill=self.fill, rotate=self.rotation)
         
 
 
@@ -1387,10 +1440,15 @@ class Ray:
     direction: "Vector3"
     distance: float = float("inf")
 
-    def intersects(self, tri: Triangle) -> Triangle | None:
+    def intersects(self, tri: Triangle) -> float | None:
         EPS = 1e-6
 
-        p1, p2, p3 = tri.points
+        p1, p2, p3 = tri._og_points
+        
+        p1 = p1 + tri.position
+        p2 = p2 + tri.position
+        p3 = p3 + tri.position
+
         edge1 = p2 - p1
         edge2 = p3 - p1
 
@@ -1415,14 +1473,10 @@ class Ray:
 
         t = f * edge2.dot(q)
 
-        if t <= EPS:
-            return None
-        
-        if t >= self.distance:
+        if t <= EPS or t >= self.distance:
             return None
 
-        return t # type: ignore
-    
+        return t
     def cast(self) -> Triangle | None: 
 
         for tri in game.triangles:
@@ -1510,6 +1564,7 @@ def main():
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
     corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
+    tri = Triangle(Vector3.zero(), *(Vector3.zero(),Vector3.zero(),Vector3.zero()))
 
 @game.register_tick
 def step(dt):

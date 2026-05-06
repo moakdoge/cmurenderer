@@ -48,33 +48,12 @@ class Cube(Base3DShape):
         for face in faces:
             scale = 1
 
-            v1 = (scaled_vertices[face[0]] * scale).rotate(self.rotation)
-            v2 = (scaled_vertices[face[1]] * scale).rotate(self.rotation)
-            v3 = (scaled_vertices[face[2]] * scale).rotate(self.rotation)
-            v4 = (scaled_vertices[face[3]] * scale).rotate(self.rotation)
+            v1 = (scaled_vertices[face[0]] * scale)#.rotate(self.rotation)
+            v2 = (scaled_vertices[face[1]] * scale)#.rotate(self.rotation)
+            v3 = (scaled_vertices[face[2]] * scale)#.rotate(self.rotation)
+            v4 = (scaled_vertices[face[3]] * scale)#.rotate(self.rotation)
 
-            normal = (v2 - v1).cross(v4 - v1).normal
-            center = (v1 + v2 + v3 + v4) * 0.25 + self.position
 
-            ambient = 0.45
-            brightness = ambient
-            if lights:
-                for light in lights:
-                    light_dir = (light.position - center).normal
-                    diffuse = max(0.0, normal.dot(light_dir))
-                    dist = light.position.distance(center)
-                    attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
-                    brightness += diffuse * light.brightness * attenuation
-            else:
-                brightness = 1.0
-
-            brightness = min(1.0, brightness)
-            face_fill = rgb(
-                int(self.fill.red * brightness),
-                int(self.fill.green * brightness),
-                int(self.fill.blue * brightness),
-            )
-
-            Triangle(self.position, v1, v2, v3, fill=self.fill)
-            Triangle(self.position, v1, v3, v4, fill=self.fill)
+            Triangle(self.position, v1, v2, v3, fill=self.fill, rotate=self.rotation)
+            Triangle(self.position, v1, v3, v4, fill=self.fill, rotate=self.rotation)
         

@@ -11,7 +11,7 @@ class Camera():
         self.yaw: float = 0
         self.roll: float = 0
         self._x = 0
-        self.light = Light(self.position, self.direction)
+        self.light = Light(self.position, self.direction, brightness=60)
         pass
     def tick(self):
         self.light.position = self.position

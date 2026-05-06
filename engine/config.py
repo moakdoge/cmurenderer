@@ -16,8 +16,9 @@ class PerformanceConfiguration:
     max_triangles: int = 1950
     shading: bool = True
     quality: float = 0.8
-    shadows: bool = True
+    shadows: bool = False
     collisions: bool = True
+
 
 
 
