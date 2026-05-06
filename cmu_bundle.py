@@ -2,20 +2,39 @@
 ### CREATED ON: 05/06/26 ###
 
 
+# ===== engine/_types.py =====
+
+from typing import TypeAlias
+
+Vector3Number: TypeAlias = float | int
+
+
 # ===== engine/vector3.py =====
 
 import math
 
 
+
+_ZERO_VECTOR: "Vector3 | None" = None
 class Vector3():
     __slots__ = ("x", "y", "z")
-    def __init__(self, x, y, z) -> None:
-        self.x=x
-        self.y=y
-        self.z=z
+    def __init__(self, x: Vector3Number, y: Vector3Number, z: Vector3Number) -> None:
+        assert isinstance(x, (int, float))
+        assert isinstance(y, (int, float))
+        assert isinstance(z, (int, float))
+        
+        self.x: Vector3Number=x
+        self.y: Vector3Number=y
+        self.z: Vector3Number=z
+        
+    
     @classmethod
     def new(cls, x,y,z):
+        assert isinstance(x, (int, float))
+        assert isinstance(y, (int, float))
+        assert isinstance(z, (int, float))
         return cls(x=x,y=y,z=z)
+    
     @classmethod
     def zero(cls) -> "Vector3":
         return cls(x=0,y=0,z=0)
@@ -23,12 +42,14 @@ class Vector3():
     @property
     def magnitude(self):
         return math.hypot(self.x, self.y, self.z)
+    
     @property
     def normal(self):
-        mag = math.sqrt((self.x*self.x)+ (self.y*self.y) + (self.z*self.z))
+        mag = self.magnitude
         if mag == 0:
             return Vector3(0,0,0)
         return Vector3.new(self.x/mag, self.y/mag, self.z/mag)
+    
     @property
     def offscreen(self) -> bool:
         BUFFER=100
@@ -36,6 +57,7 @@ class Vector3():
             return True
         x,y=self.screen if self.screen is not None else (-999999999999, -1)
         return (x < -BUFFER or x > 400+BUFFER) or (y < -BUFFER or y > 400+BUFFER)
+    
     @property
     def screen(self, width=400, height=400) -> tuple[int, int]:
         focal = 180
@@ -44,7 +66,7 @@ class Vector3():
         aspect = height / width
         screen_x = (self.x / z) * focal + width / 2
         screen_y = -(self.y / z) * focal * aspect + height / 2  # flip Y
-        return screen_x, screen_y
+        return math.floor(screen_x), math.floor(screen_y)
 
     #operators
     def __mul__(self, other):
@@ -101,12 +123,13 @@ class Vector3():
         return self
         
     def __repr__(self) -> str:
-        return f"({math.ceil(self.x)}, {math.ceil(self.y)}, {math.ceil(self.z)})"
+        return f"Vector3({math.ceil(self.x)}, {math.ceil(self.y)}, {math.ceil(self.z)})"
     def __str__(self) -> str:
         return self.__repr__()
     def __neg__(self):
         return Vector3(-self.x, -self.y, -self.z)
-    
+    def __pos__(self):
+        return Vector3(+self.x, +self.y, +self.z)
 
     #math functions
     def _qscos(self, angle):
@@ -264,12 +287,29 @@ class Player():
 
 
 
+# ===== engine/color_utils.py =====
+
+from typing import TYPE_CHECKING
+from cmu_graphics import rgb
+
+if TYPE_CHECKING:
+    from cmu_graphics.shape_logic import RGB
+    
+def set_brightness(color: "RGB", brightness: float) -> "RGB":
+    assert isinstance(brightness, float) and 0 <= brightness <= 1
+    return rgb(
+        color.red * brightness,
+        color.green * brightness,
+        color.blue * brightness
+    )
+
+
 # ===== engine/extras.py =====
 
 from __future__ import annotations
 
 from types import GenericAlias
-from typing import Any, Callable, Generic, TypeVar, overload
+from typing import Any, Callable, Generic, Type, TypeVar, dataclass_transform, overload
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -345,6 +385,104 @@ class cached_property(Generic[T, R]):
         return val
 
     __class_getitem__ = classmethod(GenericAlias)
+    
+
+from typing import TypeVar, Type, Callable, Any
+
+T = TypeVar("T")
+
+
+
+
+@dataclass_transform()
+def dataclass(frozen: bool = False, slots: bool = False, repr: bool = True):
+    def decorator(cls):
+        nonlocal frozen, slots, repr
+        
+        annotations = getattr(cls, "__annotations__", {})
+        fields = tuple(annotations.keys())
+        defaults = {}
+        if slots:
+            namespace = dict(cls.__dict__)
+
+            namespace.pop("__dict__", None)
+            namespace.pop("__weakref__", None)
+
+            # Important: remove field defaults before creating slots,
+            # because slot names conflict with class variables.
+            for name in fields:
+                if name in namespace:
+                    defaults[name] = namespace.pop(name)
+                    
+            f=list(fields)
+            f.append("_frozen")
+            namespace["__slots__"] = tuple(f)
+            class DataMeta(type):
+                def __repr__(cls):
+                    pretty = []
+                    tags = [
+                        "[FROZEN]" if frozen else "",
+                        "[SLOTS]" if slots else "",
+                        "[REPR]" if repr else ""
+                    ]
+                    for k,v in annotations.items():
+                        pretty.append(f"{k}: {v.__name__} = {defaults[k]}" if k in defaults else f"{k}: {getattr(v, '__name__', v)}")
+                    return f"<dataclass {cls.__name__}({','.join(pretty)}) {' '.join(tags)}>"
+                
+            if repr:
+                k = DataMeta
+            else:
+                k = type
+            new_cls = k(cls.__name__, cls.__bases__, namespace, )
+            new_cls.__module__ = cls.__module__
+            new_cls.__qualname__ = cls.__qualname__
+
+
+            cls = new_cls
+        annotations = getattr(cls, "__annotations__", {})
+
+        fields = list(annotations.keys())
+
+        def __init__(self, *args, **kwargs):
+            for name, value in zip(fields, args):
+                setattr(self, name, value)
+            for name in fields[len(args):]:
+                if name in kwargs:
+                    setattr(self, name, kwargs[name])
+                elif hasattr(cls, name):
+                    if slots:
+                        setattr(self, name, defaults[name])
+                    else:
+                        setattr(self, name, getattr(cls, name))
+                else:
+                    raise TypeError(f"Missing required argument: {name}")
+
+            
+            setattr(self, "_frozen", True)
+            if hasattr(self, "__post_init__") and callable(getattr(self, "__post_init__", None)):
+                self.__post_init__()
+            
+                
+        def __repr__(self):
+            values = ", ".join(
+                f"{name}={getattr(self, name)!r}"
+                for name in fields
+            )
+            return f"{cls.__name__}({values})"
+
+        cls.__init__ = __init__
+        if repr:
+            cls.__repr__ = __repr__
+        if frozen:
+            def __setattr__(self, k, v):
+                if hasattr(self, "_frozen"):
+                    raise AttributeError(f"{self.__class__.__name__} is frozen!")
+                object.__setattr__(self, k, v)
+            cls.__setattr__ = __setattr__
+
+
+        return cls
+    return decorator
 
 
 # ===== engine/triangle.py =====
@@ -366,7 +504,6 @@ class Triangle():
         position: Vector3,
         *points: Vector3,
         fill=rgb(255,255,255),
-        texture: str | None = None,
         pretransformed: bool = False,
         render_lights: bool = True,
         skip_near_clip: bool = False,
@@ -374,9 +511,12 @@ class Triangle():
         render_shadow: bool = True
     ):
         
-        #validation
-        if len(points) != 3:
-            return
+        # input validation
+        assert len(points) == 3
+        assert isinstance(position, Vector3)
+        assert all([isinstance(p, Vector3) for p in points])
+        assert isinstance(opacity, int) and 0 <= opacity <= 100
+
         self.shadow = None
         self.points: list[Vector3] = [*points]
         self.position = position
@@ -400,7 +540,7 @@ class Triangle():
 
         clipped = self.get_clip(skip_near_clip)
         if not clipped:
-            existing_game.remove_triangle(self.shadow)
+            self.delete()
             return
 
         if len(clipped) > 1:
@@ -410,10 +550,9 @@ class Triangle():
             Triangle(
                 Vector3.zero(),
                 *second,
-                fill=self._real_fill,
-                texture=texture,
+                fill=self.fill,
                 pretransformed=True,
-                render_lights=False,
+                render_lights=True,
                 skip_near_clip=True,
                 opacity=opacity,
                 render_shadow=False
@@ -422,10 +561,7 @@ class Triangle():
         self.points = list(clipped[0])
         self._count = len(self.points)
 
-        #check offscreen
-       # if self.offscreen:
-        #    self.delete()
-        #    return
+
         
         #calculate z and screens
         self.z = self.get_z()
@@ -434,20 +570,19 @@ class Triangle():
     
 
         existing_game.add_triangle(self)
-        if self.is_too_small():
-            self.delete()
-            return
-        
-        if self.is_foggy():
-            self.delete()
-            return
-        
-        if self.offscreen:
+
+        if not self.is_valid():
             self.delete()
             return
        
        
-       
+    def is_valid(self) -> bool:
+        statements = [
+            self.is_too_small(),
+            self.is_foggy(),
+            self.is_offscreen()
+        ]
+        return not any(statements)
     def get_z(self) -> float:
         return sum(_.z for _ in self.points) / self._count
         
@@ -471,14 +606,11 @@ class Triangle():
     
         return v
     
-    @property
-    def offscreen(self) -> bool:
+
+    def is_offscreen(self) -> bool:
         if all(_.offscreen for _ in self.points) and (self.physical_area < 1):
             return True
         
-        if any(_.offscreen for _ in self.points):
-            #existing_game.remove_triangle(self.shadow)
-            return True
         return False
         
     
@@ -492,7 +624,7 @@ class Triangle():
 
     
     def get_fill(self, start: "RGB") -> "RGB":
-        tmp_fill = start.darker().darker().darker().darker().darker()
+        tmp_fill = set_brightness(start, 0.8)
         world_points = self.world_points
         world_center = self.world_center
         if existing_game.configuration.shading:
@@ -510,18 +642,12 @@ class Triangle():
                 brightness += diffuse * light.brightness * attenuation
 
             brightness = max(0.0, min(1.0, brightness))
-
-            tmp_fill = rgb(
-                min(255, start.red * brightness),
-                min(255, start.green * brightness),
-                min(255, start.blue * brightness)
-            )
+            tmp_fill = set_brightness(start, brightness)
             
         return tmp_fill
         
     
     def render_shadow(self):
-        _lowest_y = min([p.y for p in self.points])
         _p = [
             Vector3.new(p.x, -50, p.z) for p in self.points
         ]
@@ -1193,13 +1319,13 @@ class Cube(Base3DShape):
 
 # ===== engine/ray.py =====
 
+@dataclass(frozen=True, slots=True)
 class Ray:
-    __slots__ = ("position", "direction", "distance")
-    def __init__(self, position: "Vector3", direction: "Vector3", distance: "float" = float("inf")) -> None:
-        self.position = position
-        self.direction = direction.normal
-        self.distance = distance
-        
+    
+    position: "Vector3"
+    direction: "Vector3"
+    distance: float = float("inf")
+
     def intersects(self, tri: Triangle) -> Triangle | None:
         EPS = 1e-6
 
@@ -1321,7 +1447,8 @@ def main():
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
     corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
-
+    r = Ray(Vector3.zero(), Vector3.zero())
+    print(Ray)
 @game.register_tick
 def step(dt):
     #print(MAX_AREA, min(fps_trend))

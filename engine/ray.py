@@ -1,13 +1,14 @@
+from engine.extras import dataclass
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
 from engine import game
+@dataclass(frozen=True, slots=True)
 class Ray:
-    __slots__ = ("position", "direction", "distance")
-    def __init__(self, position: "Vector3", direction: "Vector3", distance: "float" = float("inf")) -> None:
-        self.position = position
-        self.direction = direction.normal
-        self.distance = distance
-        
+    
+    position: "Vector3"
+    direction: "Vector3"
+    distance: float = float("inf")
+
     def intersects(self, tri: Triangle) -> Triangle | None:
         EPS = 1e-6
 
@@ -42,7 +43,7 @@ class Ray:
         if t >= self.distance:
             return None
 
-        return t
+        return t # type: ignore
     
     def cast(self) -> Triangle | None: 
 

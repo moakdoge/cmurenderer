@@ -1,15 +1,28 @@
 import math
 
+from engine._types import Vector3Number
 
+
+_ZERO_VECTOR: "Vector3 | None" = None
 class Vector3():
     __slots__ = ("x", "y", "z")
-    def __init__(self, x, y, z) -> None:
-        self.x=x
-        self.y=y
-        self.z=z
+    def __init__(self, x: Vector3Number, y: Vector3Number, z: Vector3Number) -> None:
+        assert isinstance(x, (int, float))
+        assert isinstance(y, (int, float))
+        assert isinstance(z, (int, float))
+        
+        self.x: Vector3Number=x
+        self.y: Vector3Number=y
+        self.z: Vector3Number=z
+        
+    
     @classmethod
     def new(cls, x,y,z):
+        assert isinstance(x, (int, float))
+        assert isinstance(y, (int, float))
+        assert isinstance(z, (int, float))
         return cls(x=x,y=y,z=z)
+    
     @classmethod
     def zero(cls) -> "Vector3":
         return cls(x=0,y=0,z=0)
@@ -17,12 +30,14 @@ class Vector3():
     @property
     def magnitude(self):
         return math.hypot(self.x, self.y, self.z)
+    
     @property
     def normal(self):
-        mag = math.sqrt((self.x*self.x)+ (self.y*self.y) + (self.z*self.z))
+        mag = self.magnitude
         if mag == 0:
             return Vector3(0,0,0)
         return Vector3.new(self.x/mag, self.y/mag, self.z/mag)
+    
     @property
     def offscreen(self) -> bool:
         BUFFER=100
@@ -30,6 +45,7 @@ class Vector3():
             return True
         x,y=self.screen if self.screen is not None else (-999999999999, -1)
         return (x < -BUFFER or x > 400+BUFFER) or (y < -BUFFER or y > 400+BUFFER)
+    
     @property
     def screen(self, width=400, height=400) -> tuple[int, int]:
         focal = 180
@@ -38,7 +54,7 @@ class Vector3():
         aspect = height / width
         screen_x = (self.x / z) * focal + width / 2
         screen_y = -(self.y / z) * focal * aspect + height / 2  # flip Y
-        return screen_x, screen_y
+        return math.floor(screen_x), math.floor(screen_y)
 
     #operators
     def __mul__(self, other):
@@ -95,12 +111,13 @@ class Vector3():
         return self
         
     def __repr__(self) -> str:
-        return f"({math.ceil(self.x)}, {math.ceil(self.y)}, {math.ceil(self.z)})"
+        return f"Vector3({math.ceil(self.x)}, {math.ceil(self.y)}, {math.ceil(self.z)})"
     def __str__(self) -> str:
         return self.__repr__()
     def __neg__(self):
         return Vector3(-self.x, -self.y, -self.z)
-    
+    def __pos__(self):
+        return Vector3(+self.x, +self.y, +self.z)
 
     #math functions
     def _qscos(self, angle):
