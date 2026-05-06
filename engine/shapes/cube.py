@@ -5,7 +5,7 @@ from engine.shapes import Base3DShape
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
 from engine.light import lights
-from cmu_graphics import rgb
+from cmu_graphics import Circle, rgb
 
 if TYPE_CHECKING:
     from cmu_graphics.shape_logic import RGB
@@ -75,3 +75,4 @@ class Cube(Base3DShape):
 
             Triangle(self.position, v1, v2, v3, fill=self.fill)
             Triangle(self.position, v1, v3, v4, fill=self.fill)
+        

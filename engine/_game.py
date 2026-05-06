@@ -143,7 +143,7 @@ class Game():
         self.triangles.append(triangle)
         self._triangle_count += 1
     
-    def remove_triangle(self, triangle):
+    def remove_triangle(self, triangle: "Triangle | None"):
         if triangle in self.triangles:
             self.triangles.remove(triangle)
             self._triangle_count -= 1

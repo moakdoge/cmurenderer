@@ -17,9 +17,13 @@ class Triangle():
         texture: str | None = None,
         pretransformed: bool = False,
         render_lights: bool = True,
-        skip_near_clip: bool = False
+        skip_near_clip: bool = False,
+        opacity: int = 100,
+        render_shadow: bool = True
     ):
-        
+        if len(points) != 3:
+            return
+        self.shadow = None
         self.points: list[Vector3] = [*points]
         self.position = position
         self.fill = fill
@@ -61,6 +65,23 @@ class Triangle():
                     min(255, self._real_fill.green * brightness),
                     min(255, self._real_fill.blue * brightness)
                 )
+                
+                
+                
+                if render_shadow:
+                    _lowest_y = min([p.y for p in self.points])
+                    _p = [
+                        Vector3.new(p.x, -50, p.z) for p in self.points
+                    ]
+                    self.shadow = Triangle(
+                        self.position - Vector3.new(0, 50, 0),
+                        *_p,
+                        fill=rgb(25,25,25),
+                        render_lights=False,
+                        skip_near_clip=False,
+                        opacity=25     ,
+                        render_shadow=False  
+                    )
         if not pretransformed:
             # calculate camera offset and rotate into view space
             for i, p in enumerate(self.points):
@@ -92,8 +113,11 @@ class Triangle():
 
         #check offscreen
         if all(_.offscreen for _ in self.points):
+            existing_game.remove_triangle(self.shadow)
             return
         
+        if any(_.offscreen for _ in self.points):
+            existing_game.remove_triangle(self.shadow)
 
         #calculate z and screens
         self.z = sum(_.z for _ in self.points) / self._count
@@ -109,16 +133,18 @@ class Triangle():
         self.extracted = [list(sublist) for sublist in self.screen]
         lowest = 140 * existing_game.configuration.fog
         if (self.screen_area < lowest):
+            existing_game.remove_triangle(self.shadow)
             return
         
 
 
-
+        self.opacity = opacity
         if existing_game.configuration.backface_cull:
             p1, p2, p3 = tuple(self.points)
             normal = (p2 - p1).cross(p3 - p1).normal
             view_dir = (-self.center).normal
             if normal.dot(view_dir) <= 0:
+                existing_game.remove_triangle(self.shadow)
                 return
 
         existing_game.add_triangle(self)
@@ -127,12 +153,52 @@ class Triangle():
         
         ar = self.area(*self.screen)
         if ar < (50 / existing_game.configuration.quality):
+            existing_game.remove_triangle(self.shadow)
             return
+        
         #calculate color  
         
 
+    def project_point_to_y_plane(
+        self,
+        point: Vector3,
+        light_pos: Vector3,
+        plane_y: float = 0,
+    ) -> Vector3 | None:
+        direction = point - light_pos
 
+        if abs(direction.y) < 0.0001:
+            return None
 
+        t = (plane_y - light_pos.y) / direction.y
+
+        if t < 0:
+            return None
+
+        return light_pos + direction * t
+    def shadow_triangle_on_floor(
+        self,
+        a: Vector3,
+        b: Vector3,
+        c: Vector3,
+        light_pos: Vector3,
+        plane_y: float = 0,
+    ):
+        sa = self.project_point_to_y_plane(a, light_pos, plane_y)
+        sb = self.project_point_to_y_plane(c, light_pos, plane_y)
+        sc = self.project_point_to_y_plane(b, light_pos, plane_y)
+
+        if sa is None or sb is None or sc is None:
+            return
+        Triangle(
+            self.position,
+            sa,
+            sb,
+            sc,
+            fill=rgb(0, 0, 0),
+            render_lights=False,
+            opacity=25,
+        )
     def draw(self):
         self._shape = existing_game.polygon_factory.reserve()
         if self._shape.pointList != self.extracted:
@@ -145,11 +211,16 @@ class Triangle():
                 self._shape.zindex = self.z
         except Exception as e:    
             self._shape.zindex = self.z
-        self._shape.border = self._real_fill
+        if self.opacity == 100:
+            self._shape.border = self._real_fill
+        else:
+            self._shape.border = None
         if existing_game.configuration.wireframe:
             self._shape.fill = None
-       
+        self._shape.opacity = self.opacity
         self._shape.visible = True
+
+
 
     
 
