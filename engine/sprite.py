@@ -28,7 +28,7 @@ class Sprite(): #NOTE - This is horrible.
         
         self._shape.visible = False
         self._sort_id = 1
-        s=32
+        s=math.hypot(*self.size)
         self.ai.tick()
         self._proxy = Triangle(
             self.position,
@@ -76,6 +76,9 @@ class Sprite(): #NOTE - This is horrible.
         return self.is_colliding_from(self.position, mov)
 
     def is_colliding_from(self, origin: Vector3, mov: Vector3) -> bool:
+        if mov.magnitude <= 0:
+            return False
+
         launch = Ray(
             origin,
             mov.normal,

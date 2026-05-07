@@ -49,19 +49,8 @@ def step(dt):
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
-    if not _points:
-        _points = sp.ai.pathfind(sp.position, Vector3.new(1800,0,200))
-        i = 0
-
-    tar = _points[i]
-    if sp.position.distance(tar) < 40:
-        i += 1
-        if i > len(_points) - 1:
-            i = 0
-        tar = _points[i]
-   # print(tar)
-    sp.ai.target(tar)
+    sp.ai.target(game.player)
  #   exCube.rotation += Vector3.new(0.025,0.025,0.025)
-
+    sp.ai.tick()
 
 game.run()

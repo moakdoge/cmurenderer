@@ -9,16 +9,48 @@ from engine.player import Player
 class SpriteAI:
     def __init__(self, parent: "Sprite") -> None:
         self.parent = parent
+        self._active_list: list[Vector3] = []
         self._active_target: Vector3 | None = None
+        self._path_target: Vector3 | None = None
         self._track_player: "Player | None" = None
+        self._last_position = parent.position
+        self._stuck_ticks = 0
         self.speed = 2
         pass
     
     def tick(self):
-        if self._track_player:
-            self._active_target = self._track_player.position
+        moved = self.parent.position.distance(self._last_position)
+        if moved < 0.5:
+            self._stuck_ticks += 1
+        else:
+            self._stuck_ticks = 0
+        self._last_position = self.parent.position
+
+        if self._track_player and self._path_target is None:
+            self._path_target = self._track_player.position
+
+        if self._track_player and self._stuck_ticks > 20:
+            self._active_list = []
+            self._active_target = None
+            self._path_target = self._track_player.position
+            self._stuck_ticks = 0
+
+        if self._active_target is None and self._active_list:
+            self._active_target = self._active_list.pop(0)
+
+        if self._active_target is None and self._path_target is not None:
+            self._active_list = self.pathfind(self.parent.position, self._path_target)
+            self._path_target = None
+            if self._active_list:
+                self._active_target = self._active_list.pop(0)
+
         if self._active_target is None:
             return
+
+        if self.parent.position.distance(self._active_target) < 40:
+            self._active_target = None
+            return
+
         
         movement_vector = (self._active_target - self.parent.position).normal * self.speed
         if self.parent.is_touching_player():
@@ -27,21 +59,28 @@ class SpriteAI:
         if self.parent.is_colliding(movement_vector):
             move_x = Vector3.new(movement_vector.x, 0, 0)
             move_z = Vector3.new(0, 0, movement_vector.z)
+            can_move_x = move_x.magnitude > 0 and not self.parent.is_colliding(move_x)
+            can_move_z = move_z.magnitude > 0 and not self.parent.is_colliding(move_z)
 
-            if not self.parent.is_colliding(move_x):
+            if can_move_x:
                 movement_vector = move_x
-            elif not self.parent.is_colliding(move_z):
+            elif can_move_z:
                 movement_vector = move_z
             else:
+                self._stuck_ticks += 1
                 return
 
         self.parent.position += movement_vector
     def target(self, object: "Vector3 | Player"):
         if isinstance(object, Player):
             self._track_player = object
+            self._path_target = object.position
         else:
-            self._active_target = object 
-        
+            self._track_player = None
+            self._path_target = object
+        self._active_list = []
+        self._active_target = None
+        self._stuck_ticks = 0
     def valid_point(self, origin: Vector3, point: Vector3) -> bool:
         movement = point - origin
 
@@ -68,6 +107,7 @@ class SpriteAI:
                 return candidate
 
         return start
+    
     def pathfind(self, start: Vector3, end: Vector3) -> list[Vector3]:
         steps = 28
         diff = (end - start)
