@@ -155,7 +155,6 @@ class Triangle():
                 Vector3.new(camera.pitch, camera.yaw, 0)
             )
 
-    
     def get_fill(self, start: "RGB") -> "RGB":
         tmp_fill = set_brightness(start, 0.8)
         world_points = self.world_points

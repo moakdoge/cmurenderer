@@ -265,10 +265,10 @@ class Game():
     def tick(self):
         self.clear_screen()
         self.camera.tick()
-        self.tick_renderables()
         for shape in self._shapes:
             shape._draw()
         self.render_triangles()
+        self.tick_renderables()
         self.player.update()
         self.zlayer_screen()
 

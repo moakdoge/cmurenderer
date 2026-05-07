@@ -73,8 +73,11 @@ class Sprite(): #NOTE - This is horrible.
             return
 
     def is_colliding(self, mov: Vector3):
+        return self.is_colliding_from(self.position, mov)
+
+    def is_colliding_from(self, origin: Vector3, mov: Vector3) -> bool:
         launch = Ray(
-            self.position,
+            origin,
             mov.normal,
             mov.magnitude
         )
