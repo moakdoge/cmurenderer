@@ -46,7 +46,7 @@ def strip_local_imports(source: str) -> str:
     for node in tree.body:
         path = local_import_path(node)
         if path:
-            for i in range(node.lineno, node.end_lineno + 1):
+            for i in range(node.lineno, node.end_lineno + 1): # type: ignore
                 remove_lines.add(i)
 
     return "\n".join(
@@ -54,7 +54,81 @@ def strip_local_imports(source: str) -> str:
         if i not in remove_lines
     )
 
+import io
+import tokenize
 
+
+def strip_comments_and_blank_lines(source: str) -> str:
+    out = []
+
+    for line in source.splitlines():
+        stripped = line.strip()
+
+        if not stripped:
+            continue
+
+        if stripped.startswith("#"):
+            continue
+
+        out.append(line.rstrip())
+
+    return "\n".join(out)
+
+
+class ReleaseOptimizer(ast.NodeTransformer):
+    def visit_Assert(self, node):
+        return None
+
+    def visit_FunctionDef(self, node):
+        self.generic_visit(node)
+
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            node.body.pop(0)
+
+        return node
+
+    def visit_ClassDef(self, node):
+        self.generic_visit(node)
+
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            node.body.pop(0)
+
+        return node
+
+    def visit_Module(self, node):
+        self.generic_visit(node)
+
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            node.body.pop(0)
+
+        return node
+        
+    def visit_If(self, node):
+        self.generic_visit(node)
+
+        # if TYPE_CHECKING:
+        if (
+            isinstance(node.test, ast.Name)
+            and node.test.id == "TYPE_CHECKING"
+        ):
+            return None
+
+        return node
 def add_file(path: Path):
     path = path.resolve()
 
@@ -65,14 +139,20 @@ def add_file(path: Path):
 
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source)
+    tree = ReleaseOptimizer().visit(tree)
+    ast.fix_missing_locations(tree)
 
+    optimized_source = ast.unparse(tree)
+
+    source = strip_local_imports(optimized_source)
     for node in tree.body:
+        
         dep = local_import_path(node)
         if dep:
             add_file(dep)
 
     cleaned = strip_local_imports(source)
-
+    cleaned = strip_comments_and_blank_lines(cleaned)
     parts.append(f"\n\n# ===== {path.relative_to(ROOT)} =====\n")
     parts.append(cleaned)
 
