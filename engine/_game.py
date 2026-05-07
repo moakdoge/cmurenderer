@@ -258,9 +258,14 @@ class Game():
 
         return visible
 
+    def tick_renderables(self):
+        for renderable in self.renderables:
+            if hasattr(renderable, "tick"):
+                renderable.tick()
     def tick(self):
         self.clear_screen()
         self.camera.tick()
+        self.tick_renderables()
         for shape in self._shapes:
             shape._draw()
         self.render_triangles()

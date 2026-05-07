@@ -1,6 +1,7 @@
 import math
 
 from engine.assets.asset import Asset
+from engine.sprite_ai import SpriteAI
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
 from engine.cmu_utils import  CMUtils
@@ -18,14 +19,17 @@ class Sprite(): #NOTE - This is horrible.
         self._sort_id = 1
         self.opacity = 100
         self.size = size
+        self.ai = SpriteAI(self)
 
         pass
     
 
     def tick(self):
+        
         self._shape.visible = False
         self._sort_id = 1
         s=32
+        self.ai.tick()
         self._proxy = Triangle(
             self.position,
             Vector3(-s, 0, 0),
@@ -34,6 +38,7 @@ class Sprite(): #NOTE - This is horrible.
             render_shadow=False,
             render_lights=False,
             fill=rgb(128,128,128),
+            opacity=0
         )
 
         self._proxy_b = Triangle(
@@ -44,6 +49,7 @@ class Sprite(): #NOTE - This is horrible.
             render_shadow=False,
             render_lights=False,
             fill=rgb(128,128,128),
+            opacity=0
         )
         self.z = self.position.z
         scale = 300 / self.position.distance(self.game.camera.position)
@@ -60,21 +66,21 @@ class Sprite(): #NOTE - This is horrible.
         cY = self._proxy.screen[0][1]
         self._shape.centerX = cX
         self._shape.centerY = cY
+        
         self._shape.visible = True
+        
         if not self.game:
             return
 
     def is_colliding(self, mov: Vector3):
-        if mov.magnitude <= 0:
-            return False
-
         launch = Ray(
             self.position,
             mov.normal,
             mov.magnitude
         )
 
-        return launch.cast() is not None
+        c = launch.cast()
+        return c is not None
     
     def is_touching_player(self):
         return self.position.distance(self.game.player.position) < 40
