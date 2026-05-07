@@ -42,7 +42,7 @@ class Ray:
 
         t = f * edge2.dot(q)
 
-        if t <= EPS or t >= self.distance:
+        if t <= EPS or t > self.distance:
             return None
 
         return t

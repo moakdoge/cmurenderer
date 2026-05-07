@@ -36,6 +36,7 @@ class Game():
         self.player._game_parent = self
         self.configuration: "GameConfiguration"
         self.triangles: list[Triangle] = []
+        self.renderables: list = []
         self._triangle_count = 0
         self._triangle_seq = 0
         self.assets = AssetSubsystem(self)
@@ -84,7 +85,7 @@ class Game():
         forward.x *= -1
         forward.y = 0
         right = Vector3(forward.z, 0, -forward.x).normal
-        speed = 60
+        speed = 16
         if "w" in keys: self.player.velocity += forward * speed * 1
         if "s" in keys: self.player.velocity += forward * speed * -1
         if "a" in keys: self.player.velocity += right * speed * -1
@@ -153,9 +154,10 @@ class Game():
     
     def zlayer_screen(self):
         ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.current.quality*1.125)))
-        
+        tri = self.triangles.copy()
+        tri.extend(self.renderables)
         sorted_triangles = sorted(
-            self.triangles,
+            tri,
             reverse=True,
             key=lambda tri: tri.z + (tri._sort_id * 1e-6) + 4*(tri.opacity == 100) # type: ignore
         )

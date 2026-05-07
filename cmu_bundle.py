@@ -728,6 +728,7 @@ class Game:
         self.player._game_parent = self
         self.configuration: 'GameConfiguration'
         self.triangles: list[Triangle] = []
+        self.renderables: list = []
         self._triangle_count = 0
         self._triangle_seq = 0
         self.assets = AssetSubsystem(self)
@@ -826,7 +827,9 @@ class Game:
         self._triangle_seq = 0
     def zlayer_screen(self):
         ci = min(self._triangle_count, math.floor(self._triangle_count * (self.configuration.current.quality * 1.125)))
-        sorted_triangles = sorted(self.triangles, reverse=True, key=lambda tri: tri.z + tri._sort_id * 1e-06 + 4 * (tri.opacity == 100))
+        tri = self.triangles.copy()
+        tri.extend(self.renderables)
+        sorted_triangles = sorted(tri, reverse=True, key=lambda tri: tri.z + tri._sort_id * 1e-06 + 4 * (tri.opacity == 100))
         for tri in sorted_triangles:
             if not hasattr(tri, '_shape'):
                 continue
@@ -1001,6 +1004,46 @@ class Cube(Base3DShape):
             Triangle(self.position, v1, v3, v4, fill=self.fill, rotate=self.rotation)
 
 
+# ===== engine/sprite.py =====
+
+import math
+from cmu_graphics import Image
+class Sprite:
+    def __init__(self, sprite: Asset, position: Vector3, size: tuple[int, int]) -> None:
+        self.sprite = sprite
+        self.position = position
+        self.game = CMUtils._game
+        asset = self.game.assets.load_asset(sprite)
+        self._shape = Image(asset, 100, 100)
+        self.game.renderables.append(self)
+        self.z = self.position.z
+        self._sort_id = 1
+        self.opacity = 100
+        self.size = size
+        pass
+    def tick(self):
+        self._shape.visible = False
+        self._sort_id = 1
+        self._proxy = Triangle(self.position, Vector3(-1, -1, 0), Vector3(1, -1, 0), Vector3(0, 1, 0), opacity=100, render_shadow=False, render_lights=False)
+        self.z = self.position.z
+        scale = 300 / self.position.distance(self.game.camera.position)
+        self.z = self.position.z / scale
+        if scale < 0.25:
+            return
+        self._shape.width = self.size[0] * scale
+        self._shape.height = self.size[1] * scale
+        self._shape.opacity = max(0, min(100, scale * 100))
+        if not hasattr(self._proxy, 'screen'):
+            return
+        cX = self._proxy.screen[0][0]
+        cY = self._proxy.screen[0][1]
+        self._shape.centerX = cX
+        self._shape.centerY = cY
+        self._shape.visible = True
+        if not self.game:
+            return
+
+
 # ===== engine/shapes/sphere.py =====
 
 import math
@@ -1055,14 +1098,15 @@ def main():
     app.triangleLabel = Label('Triangles: 0', 360, 50)
     floor = Cube(position=Vector3.new(800, -270, 400), size=Vector3.new(2500, 250, 2500), fill=rgb(0, 255, 0))
     exCube = Cube(position=Vector3.new(0, 0, 500), size=Vector3.new(100, 100, 100))
-    corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0, 0, 255))
     tri = Triangle(Vector3.zero(), *(Vector3.zero(), Vector3.zero(), Vector3.zero()))
-    v = game.assets.verify_asset(Asset('/home/moakdoge/Desktop/bullcrapv4/995926089329874021.png', 'cmu://881058/45181084/map.png'))
-    print(v)
+    v = Sprite(Asset('/home/moakdoge/Desktop/bullcrapv4/995926089329874021.png', 'cmu://881058/45181084/map.png'), Vector3.new(200, 0, 200), (100, 100))
+    app.sp = v
 @game.register_tick
 def step(dt):
     app.fpsLabel.value = f'FPS: {rounded(1 / dt)}'
     app.triangleLabel.value = f'Triangles: {game._triangle_count}'
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
+    app.sp.tick()
+    app.sp.position += (game.player.position - app.sp.position).normal * 4
 game.run()

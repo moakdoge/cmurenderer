@@ -8,6 +8,7 @@ from cmu_graphics import app
 if TYPE_CHECKING:
     from engine._game import Game
 
+from engine.triangle import Triangle
 from engine.ray import Ray
 
 class Player():
@@ -41,6 +42,17 @@ class Player():
         return r.cast() is not None
     
     def update(self):
+        s = 48
+        self.collider = Triangle(
+            self.position,
+            Vector3(-s, 0, 0),
+            Vector3(s, 0, 0),
+            Vector3(0, s * 2, 0),
+            render_shadow=False,
+            render_lights=False,
+            opacity=1,
+        )
+
         if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0 and self._game_parent.configuration.current.collisions:
             move = self.velocity * app.dt
             for axis_move in (
