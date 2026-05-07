@@ -1,7 +1,7 @@
 from engine.extras import dataclass
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
-from engine import game
+from engine.cmu_utils import CMUtils
 @dataclass(frozen=True, slots=True)
 class Ray:
     
@@ -47,7 +47,7 @@ class Ray:
 
         return t
     def cast(self) -> Triangle | None: 
-
+        game = CMUtils._game
         for tri in game.triangles:
             if self.intersects(tri):
                 return tri

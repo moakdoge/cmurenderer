@@ -1,12 +1,5 @@
 ### CREATED BY @MOAKDOGE ###
-### CREATED ON: 05/06/26 ###
-
-
-# ===== engine/_types.py =====
-
-from typing import TypeAlias
-
-Vector3Number: TypeAlias = float | int
+### CREATED ON: 05/07/26 ###
 
 
 # ===== engine/extras.py =====
@@ -190,6 +183,32 @@ def dataclass(init: bool = True, frozen: bool = False, slots: bool = False, repr
 
         return cls
     return decorator
+
+
+# ===== engine/assets/asset_type.py =====
+
+from enum import Enum
+
+class AssetType(Enum):
+    IMAGE = 0
+    
+
+
+# ===== engine/assets/asset.py =====
+
+
+@dataclass(frozen=True, slots=True)
+class Asset:
+    desktop_path: str
+    cmu_path: str
+    asset_type: AssetType = AssetType.IMAGE
+
+
+# ===== engine/_types.py =====
+
+from typing import TypeAlias
+
+Vector3Number: TypeAlias = float | int
 
 
 # ===== engine/vector3.py =====
@@ -385,6 +404,40 @@ class Vector3():
         return a + (b - a) * t
 
 
+# ===== engine/assets/asset_subsystem.py =====
+
+from typing import TYPE_CHECKING
+
+
+
+from cmu_graphics import Image
+if TYPE_CHECKING:
+    from engine._game import Game
+    
+@dataclass()
+class AssetSubsystem():
+    parent: "Game"
+    def load_asset(self, asset: Asset) -> str:
+        '''Gets the URL for the respective asset'''
+        assert isinstance(asset, Asset)
+        
+        #okay, we have an image.
+        if self.parent.utils.is_web():
+            return asset.cmu_path
+        return asset.desktop_path
+    
+    def verify_asset(self, asset: Asset) -> bool:
+        try:
+            with open(f"{self.parent.utils.backend_url}{self.load_asset(asset)}", "rb") as f:
+                pass
+        except FileNotFoundError as e:
+            return False
+        return True
+
+
+        
+
+
 # ===== engine/light.py =====
 
 from cmu_graphics import rgb
@@ -442,83 +495,6 @@ class Camera():
     def __repr__(self) -> str:
         st = f'Camera(position={self.position.__repr__()},yaw={math.ceil(math.degrees(self.yaw))},pitch={math.ceil(math.degrees(self.pitch))},roll={math.ceil(math.degrees(self.roll))})'
         return st
-
-
-# ===== engine/player.py =====
-
-import math
-from typing import TYPE_CHECKING
-
-from cmu_graphics import app
-
-if TYPE_CHECKING:
-    from engine._game import Game
-
-class Player():
-    def __init__(self, camera: Camera) -> None:
-        self.attached_camera = camera
-        self.position: Vector3 = Vector3.zero()
-        self.velocity: Vector3 = Vector3.new(0,0,0)
-        self.max_health = 100
-        self._game_parent: "Game"
-        self.health = 100
-        
-    def __setattr__(self, name: str, value) -> None:
-        if name == "position":
-            self.attached_camera.position = value
-        object.__setattr__(self, name, value)
-    def on_floor(self):
-        return (self.position.y <= 0)
-    
-    def check_collision(self, vel: Vector3) -> bool:
-        from engine.ray import Ray
-
-        dst = math.hypot(vel.x, vel.y, vel.z)
-        if dst <= 0:
-            return False
-
-        dir = Vector3(
-            vel.x / dst,
-            vel.y / dst,
-            vel.z / dst,
-        )
-
-        r = Ray(self.position, dir, dst*2)
-        return r.cast() is not None
-    
-    def update(self):
-        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0 and self._game_parent.configuration.current.collisions:
-            move = self.velocity * app.dt
-            for axis_move in (
-                Vector3(move.x, 0, 0),
-                Vector3(0, move.y, 0),
-                Vector3(0, 0, move.z),
-            ):
-                if axis_move.magnitude <= 0:
-                    continue
-
-                if not self.check_collision(axis_move):
-                    self.position += axis_move
-                else:
-                    if axis_move.x: self.velocity.x = 0
-                    if axis_move.y: self.velocity.y = 0
-                    if axis_move.z: self.velocity.z = 0
-
-        if not self.on_floor():
-            self.velocity -= Vector3.new(0,1.75,0)
-        else:
-            self.velocity.y = 0
-        self.velocity *= 0.8
-
-        if self.position.y < 0:
-            self.position.y = 0
-
-
-    def jump(self):
-        if self.on_floor():
-            self.velocity += Vector3.new(0, 12, 0)
-
-
 
 
 # ===== engine/color_utils.py =====
@@ -849,17 +825,20 @@ class Triangle():
 # ===== engine/cmu_utils.py =====
 
 
+import random
 import sys
 from typing import TYPE_CHECKING, Literal
 
-
+from cmu_graphics import rgb
 if TYPE_CHECKING:
     from engine._game import Game
+    from cmu_graphics.shape_logic import RGB
 class CMUtils():
     _game: "Game"
     def __init__(self) -> None:
         self._globals: dict = {}
         self.locked_mouse = False
+        
     @staticmethod
     def register_game(obj) -> "Game":
         CMUtils._game: "Game" = obj
@@ -939,6 +918,7 @@ class CMUtils():
             pygame.mouse.set_visible(False)
             pygame.event.set_grab(True)
         self.locked_mouse = True
+        
     def unlock_mouse(self):
         '''Unsupported on CMU'''
         if self.is_desktop():
@@ -947,6 +927,143 @@ class CMUtils():
             pygame.event.set_grab(False)
         self.locked_mouse = False
         
+
+    def random_color(self) -> "RGB":
+        rng1, rng2, rng3 = random.randint(0,255),random.randint(0,255),random.randint(0,255)
+        return rgb(rng1, rng2, rng3)
+    
+    @property
+    def backend_url(self):
+        if self.is_web():
+            return "https://backend.academy.cs.cmu.edu/get-image/?url="
+        return ""
+
+
+# ===== engine/ray.py =====
+
+@dataclass(frozen=True, slots=True)
+class Ray:
+    
+    position: "Vector3"
+    direction: "Vector3"
+    distance: float = float("inf")
+
+    def intersects(self, tri: Triangle) -> float | None:
+        EPS = 1e-6
+
+        p1, p2, p3 = tri._og_points
+        
+        p1 = p1 + tri.position
+        p2 = p2 + tri.position
+        p3 = p3 + tri.position
+
+        edge1 = p2 - p1
+        edge2 = p3 - p1
+
+        h = self.direction.cross(edge2)
+        a = edge1.dot(h)
+
+        if -EPS < a < EPS:
+            return None
+
+        f = 1.0 / a
+        s = self.position - p1
+        u = f * s.dot(h)
+
+        if u < 0.0 or u > 1.0:
+            return None
+
+        q = s.cross(edge1)
+        v = f * self.direction.dot(q)
+
+        if v < 0.0 or u + v > 1.0:
+            return None
+
+        t = f * edge2.dot(q)
+
+        if t <= EPS or t >= self.distance:
+            return None
+
+        return t
+    def cast(self) -> Triangle | None: 
+        game = CMUtils._game
+        for tri in game.triangles:
+            if self.intersects(tri):
+                return tri
+        return None
+
+
+# ===== engine/player.py =====
+
+import math
+from typing import TYPE_CHECKING
+
+from cmu_graphics import app
+
+if TYPE_CHECKING:
+    from engine._game import Game
+
+
+class Player():
+    def __init__(self, camera: Camera) -> None:
+        self.attached_camera = camera
+        self.position: Vector3 = Vector3.zero()
+        self.velocity: Vector3 = Vector3.new(0,0,0)
+        self.max_health = 100
+        self._game_parent: "Game"
+        self.health = 100
+        
+    def __setattr__(self, name: str, value) -> None:
+        if name == "position":
+            self.attached_camera.position = value
+        object.__setattr__(self, name, value)
+    def on_floor(self):
+        return (self.position.y <= 0)
+    
+    def check_collision(self, vel: Vector3) -> bool:
+        dst = math.hypot(vel.x, vel.y, vel.z)
+        if dst <= 0:
+            return False
+
+        dir = Vector3(
+            vel.x / dst,
+            vel.y / dst,
+            vel.z / dst,
+        )
+
+        r = Ray(self.position, dir, dst*2)
+        return r.cast() is not None
+    
+    def update(self):
+        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or abs(self.velocity.z) > 0 and self._game_parent.configuration.current.collisions:
+            move = self.velocity * app.dt
+            for axis_move in (
+                Vector3(move.x, 0, 0),
+                Vector3(0, move.y, 0),
+                Vector3(0, 0, move.z),
+            ):
+                if axis_move.magnitude <= 0:
+                    continue
+
+                if not self.check_collision(axis_move):
+                    self.position += axis_move
+                else:
+                    if axis_move.x: self.velocity.x = 0
+                    if axis_move.y: self.velocity.y = 0
+                    if axis_move.z: self.velocity.z = 0
+
+        
+        self.velocity -= Vector3.new(0,32,0)
+        self.velocity *= 0.95
+
+        if self.position.y < 0:
+            self.position.y = 0
+
+
+    def jump(self):
+        self.velocity += Vector3.new(0, 140, 0)
+
+
 
 
 # ===== engine/polygon_factory.py =====
@@ -1026,6 +1143,7 @@ class Game():
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
         self._triangle_seq = 0
+        self.assets = AssetSubsystem(self)
         self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
@@ -1129,7 +1247,6 @@ class Game():
             if hasattr(triangle, "_shape"):
                 self.polygon_factory.free(triangle._shape)
                 triangle._shape.visible = False
-                del triangle._shape
             self.triangles.remove(triangle)
             self._triangle_count -= 1
     
@@ -1431,60 +1548,6 @@ class Cube(Base3DShape):
         
 
 
-# ===== engine/ray.py =====
-
-@dataclass(frozen=True, slots=True)
-class Ray:
-    
-    position: "Vector3"
-    direction: "Vector3"
-    distance: float = float("inf")
-
-    def intersects(self, tri: Triangle) -> float | None:
-        EPS = 1e-6
-
-        p1, p2, p3 = tri._og_points
-        
-        p1 = p1 + tri.position
-        p2 = p2 + tri.position
-        p3 = p3 + tri.position
-
-        edge1 = p2 - p1
-        edge2 = p3 - p1
-
-        h = self.direction.cross(edge2)
-        a = edge1.dot(h)
-
-        if -EPS < a < EPS:
-            return None
-
-        f = 1.0 / a
-        s = self.position - p1
-        u = f * s.dot(h)
-
-        if u < 0.0 or u > 1.0:
-            return None
-
-        q = s.cross(edge1)
-        v = f * self.direction.dot(q)
-
-        if v < 0.0 or u + v > 1.0:
-            return None
-
-        t = f * edge2.dot(q)
-
-        if t <= EPS or t >= self.distance:
-            return None
-
-        return t
-    def cast(self) -> Triangle | None: 
-
-        for tri in game.triangles:
-            if self.intersects(tri):
-                return tri
-        return None
-
-
 # ===== engine/shapes/sphere.py =====
 
 import math
@@ -1565,7 +1628,11 @@ def main():
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
     corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
     tri = Triangle(Vector3.zero(), *(Vector3.zero(),Vector3.zero(),Vector3.zero()))
-
+    v = game.assets.verify_asset(Asset(
+        "/home/moakdoge/Desktop/bullcrapv4/995926089329874021.png",
+        "cmu://881058/45181084/map.png"
+    ))
+    print(v)
 @game.register_tick
 def step(dt):
     #print(MAX_AREA, min(fps_trend))
@@ -1573,7 +1640,7 @@ def step(dt):
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
-    exCube.rotation += Vector3.new(0.025,0.025,0.025)
+ #   exCube.rotation += Vector3.new(0.025,0.025,0.025)
 
 
 game.run()

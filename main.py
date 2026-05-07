@@ -1,6 +1,7 @@
 from operator import pos
 import sys,math
 import time
+from engine.assets.asset import Asset
 from engine.shapes.cube import Cube
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
@@ -31,7 +32,11 @@ def main():
     exCube = Cube(position=Vector3.new(0,0,500), size=Vector3.new(100,100,100))
     corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
     tri = Triangle(Vector3.zero(), *(Vector3.zero(),Vector3.zero(),Vector3.zero()))
-
+    v = game.assets.verify_asset(Asset(
+        "/home/moakdoge/Desktop/bullcrapv4/995926089329874021.png",
+        "cmu://881058/45181084/map.png"
+    ))
+    print(v)
 @game.register_tick
 def step(dt):
     #print(MAX_AREA, min(fps_trend))
@@ -39,7 +44,7 @@ def step(dt):
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
-    exCube.rotation += Vector3.new(0.025,0.025,0.025)
+ #   exCube.rotation += Vector3.new(0.025,0.025,0.025)
 
 
 game.run()

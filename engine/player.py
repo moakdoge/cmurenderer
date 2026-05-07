@@ -8,6 +8,8 @@ from cmu_graphics import app
 if TYPE_CHECKING:
     from engine._game import Game
 
+from engine.ray import Ray
+
 class Player():
     def __init__(self, camera: Camera) -> None:
         self.attached_camera = camera
@@ -25,8 +27,6 @@ class Player():
         return (self.position.y <= 0)
     
     def check_collision(self, vel: Vector3) -> bool:
-        from engine.ray import Ray
-
         dst = math.hypot(vel.x, vel.y, vel.z)
         if dst <= 0:
             return False
@@ -58,18 +58,15 @@ class Player():
                     if axis_move.y: self.velocity.y = 0
                     if axis_move.z: self.velocity.z = 0
 
-        if not self.on_floor():
-            self.velocity -= Vector3.new(0,1.75,0)
-        else:
-            self.velocity.y = 0
-        self.velocity *= 0.8
+        
+        self.velocity -= Vector3.new(0,32,0)
+        self.velocity *= 0.95
 
         if self.position.y < 0:
             self.position.y = 0
 
 
     def jump(self):
-        if self.on_floor():
-            self.velocity += Vector3.new(0, 12, 0)
+        self.velocity += Vector3.new(0, 140, 0)
 
 

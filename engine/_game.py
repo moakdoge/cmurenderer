@@ -4,11 +4,13 @@ from typing import TYPE_CHECKING, Callable
 
 from cmu_graphics import *
 
+from engine.assets.asset_subsystem import AssetSubsystem
 from engine.camera import Camera
 from engine.light import Light
 from engine.player import Player
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
+from engine.ray import Ray
 
 
 from engine.cmu_utils import CMUtils
@@ -36,6 +38,7 @@ class Game():
         self.triangles: list[Triangle] = []
         self._triangle_count = 0
         self._triangle_seq = 0
+        self.assets = AssetSubsystem(self)
         self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
@@ -139,7 +142,6 @@ class Game():
             if hasattr(triangle, "_shape"):
                 self.polygon_factory.free(triangle._shape)
                 triangle._shape.visible = False
-                del triangle._shape
             self.triangles.remove(triangle)
             self._triangle_count -= 1
     

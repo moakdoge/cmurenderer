@@ -1,15 +1,18 @@
 
+import random
 import sys
 from typing import TYPE_CHECKING, Literal
 
-
+from cmu_graphics import rgb
 if TYPE_CHECKING:
     from engine._game import Game
+    from cmu_graphics.shape_logic import RGB
 class CMUtils():
     _game: "Game"
     def __init__(self) -> None:
         self._globals: dict = {}
         self.locked_mouse = False
+        
     @staticmethod
     def register_game(obj) -> "Game":
         CMUtils._game: "Game" = obj
@@ -89,6 +92,7 @@ class CMUtils():
             pygame.mouse.set_visible(False)
             pygame.event.set_grab(True)
         self.locked_mouse = True
+        
     def unlock_mouse(self):
         '''Unsupported on CMU'''
         if self.is_desktop():
@@ -97,3 +101,13 @@ class CMUtils():
             pygame.event.set_grab(False)
         self.locked_mouse = False
         
+
+    def random_color(self) -> "RGB":
+        rng1, rng2, rng3 = random.randint(0,255),random.randint(0,255),random.randint(0,255)
+        return rgb(rng1, rng2, rng3)
+    
+    @property
+    def backend_url(self):
+        if self.is_web():
+            return "https://backend.academy.cs.cmu.edu/get-image/?url="
+        return ""
