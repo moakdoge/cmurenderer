@@ -40,6 +40,7 @@ def main():
     ), Vector3.new(200,0,200),(100, 100))
     
     sp = v
+    sp.ai.target(game.player)
 i=0
 @game.register_tick
 def step(dt):
@@ -49,7 +50,6 @@ def step(dt):
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
-    sp.ai.target(game.player)
  #   exCube.rotation += Vector3.new(0.025,0.025,0.025)
     sp.ai.tick()
 

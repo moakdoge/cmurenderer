@@ -32,6 +32,14 @@ class Camera():
             -math.sin(pitch),
             math.cos(yaw) * math.cos(pitch)
         ).normal
+        
+    @property
+    def rotdir(self):
+        return Vector3.new(
+            self.pitch,
+            self.yaw,
+            0
+        )
     def __setattr__(self, name: str, value) -> None:
         if name == "pitch":
             value = max(math.radians(-90), min(math.radians(90), value))

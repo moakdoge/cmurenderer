@@ -59,9 +59,10 @@ class Triangle():
             
             
         if not pretransformed:
-            if rotate is not None:
-                self.points = self.rotate_points(rotate) 
-            self.transform(existing_game.camera)
+            pass
+           # if rotate is not None:
+            #    self.points = self.rotate_points(rotate) 
+            #self.transform(existing_game.camera)
             
 
         clipped = self.get_clip(skip_near_clip)
