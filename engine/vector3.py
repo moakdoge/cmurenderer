@@ -2,7 +2,6 @@ import math
 
 from engine._types import Vector3Number
 from engine.extras import dataclass
-from engine.cmu_utils import CMUtils
 
 
 _ZERO_VECTOR: "Vector3 | None" = None
@@ -47,19 +46,12 @@ class Vector3():
     
     @property
     def screen(self, width=400, height=400) -> tuple[int, int]:
-        camera = CMUtils._game.camera
-        new = self.rotate(camera.rotdir)
-        new += camera.position
-        x,y,z = new.x, new.y, new.z
-    
-
-        #process camera rotation
         focal = 180
         camera_offset = 0
-        z = z + camera_offset
+        z = self.z + camera_offset
         aspect = height / width
-        screen_x = (x / z) * focal + width / 2
-        screen_y = -(y / z) * focal * aspect + height / 2  # flip Y
+        screen_x = (self.x / z) * focal + width / 2
+        screen_y = -(self.y / z) * focal * aspect + height / 2  # flip Y
         return math.floor(screen_x), math.floor(screen_y)
 
     #operators
