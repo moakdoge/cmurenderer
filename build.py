@@ -1,6 +1,7 @@
 import datetime
 from pathlib import Path
 import ast
+from typing import Any
 
 ROOT = Path(__file__).parent
 ENTRY = ROOT / "main.py"
@@ -80,7 +81,7 @@ class ReleaseOptimizer(ast.NodeTransformer):
         return None
 
     def visit_FunctionDef(self, node):
-        self.generic_visit(node)
+        #self.generic_visit(node)
 
         if (
             node.body
@@ -89,11 +90,10 @@ class ReleaseOptimizer(ast.NodeTransformer):
             and isinstance(node.body[0].value.value, str)
         ):
             node.body.pop(0)
-
+        self.generic_visit(node)
         return node
 
     def visit_ClassDef(self, node):
-        self.generic_visit(node)
 
         if (
             node.body
@@ -102,12 +102,10 @@ class ReleaseOptimizer(ast.NodeTransformer):
             and isinstance(node.body[0].value.value, str)
         ):
             node.body.pop(0)
-
+        self.generic_visit(node)
         return node
 
     def visit_Module(self, node):
-        self.generic_visit(node)
-
         if (
             node.body
             and isinstance(node.body[0], ast.Expr)
@@ -116,19 +114,47 @@ class ReleaseOptimizer(ast.NodeTransformer):
         ):
             node.body.pop(0)
 
+        self.generic_visit(node)
         return node
         
     def visit_If(self, node):
-        self.generic_visit(node)
-
-        # if TYPE_CHECKING:
+        # Remove: if TYPE_CHECKING:
         if (
             isinstance(node.test, ast.Name)
             and node.test.id == "TYPE_CHECKING"
         ):
-            return None
+            return ast.Pass()
 
+        # Fold: if False:
+        if isinstance(node.test, ast.Constant):
+            if node.test.value is False:
+                # Keep the else branch, if present.
+                return node.orelse or ast.Pass()
+
+            if node.test.value is True:
+                # Keep the body and discard the else branch.
+                return node.body
+
+        self.generic_visit(node)
         return node
+
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            name = node.func.attr
+        else:
+            name = None
+
+        if name == "is_web":
+            return ast.Constant(True)
+        
+        if name == "is_desktop":
+            return ast.Constant(False)
+
+        self.generic_visit(node)
+        return node
+    
 def add_file(path: Path):
     path = path.resolve()
 
@@ -140,6 +166,8 @@ def add_file(path: Path):
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     tree = ReleaseOptimizer().visit(tree)
+    tree = ReleaseOptimizer().visit(tree)
+   # tree = ReleaseOptimizer().visit(tree)
     ast.fix_missing_locations(tree)
 
     optimized_source = ast.unparse(tree)

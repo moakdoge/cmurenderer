@@ -10,14 +10,15 @@ class DebugConfiguration:
     
 @dataclass(slots=True)
 class PerformanceConfiguration:
-    minimum_physical_area_cull: int = 50_000
+    minimum_physical_area_cull: int = 5_000
     zbuffer_enabled: bool = True
-    zbuffer_size: int = 6
-    max_triangles: int = 1950
+    zbuffer_size: int = 4
+    max_triangles: int = 195
     shading: bool = True
     quality: float = 0.8
     shadows: bool = False
     collisions: bool = True
+    process_sprites: bool = False
 
 
 

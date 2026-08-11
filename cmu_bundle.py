@@ -1,5 +1,5 @@
 ### CREATED BY @MOAKDOGE ###
-### CREATED ON: 05/07/26 ###
+### CREATED ON: 08/11/26 ###
 
 
 # ===== engine/extras.py =====
@@ -276,12 +276,12 @@ class Vector3:
 
 from typing import TYPE_CHECKING
 from cmu_graphics import Image
+pass
 @dataclass()
 class AssetSubsystem:
     parent: 'Game'
     def load_asset(self, asset: Asset) -> str:
-        if self.parent.utils.is_web():
-            return asset.cmu_path
+        return asset.cmu_path
         return asset.desktop_path
     def verify_asset(self, asset: Asset) -> bool:
         try:
@@ -341,6 +341,7 @@ class Camera:
 
 from typing import TYPE_CHECKING
 from cmu_graphics import rgb
+pass
 def set_brightness(color: 'RGB', brightness: float) -> 'RGB':
     return rgb(color.red * brightness, color.green * brightness, color.blue * brightness)
 
@@ -349,6 +350,7 @@ def set_brightness(color: 'RGB', brightness: float) -> 'RGB':
 
 from typing import TYPE_CHECKING
 from cmu_graphics import *
+pass
 existing_game: 'Game'
 class Triangle:
     __slots__ = ('shadow', 'points', 'position', 'fill', '_count', '_real_fill', 'opacity', 'fogged', 'z', 'screen', 'extracted', '_shape', '_sort_id', 'average_screen_dist', '_og_points')
@@ -516,6 +518,7 @@ import random
 import sys
 from typing import TYPE_CHECKING, Literal
 from cmu_graphics import rgb
+pass
 class CMUtils:
     _game: 'Game'
     def __init__(self) -> None:
@@ -527,29 +530,19 @@ class CMUtils:
         return obj
     @property
     def cmu_graphics(self):
-        if self.is_desktop():
-            import cmu_graphics
-            return cmu_graphics
+        pass
         return None
     @property
     def version(self):
-        if self.is_desktop():
-            from cmu_graphics import cmu_graphics
-            import os
-            current_directory = os.path.dirname(os.path.realpath(cmu_graphics.__file__))
-            with open(os.path.join(current_directory, 'meta', 'version.txt')) as f:
-                version = f.read().strip()
-                return version
-        else:
-            with open('https://s3.amazonaws.com/cmu-cs-academy.lib.prod/desktop-cmu-graphics/version.txt', 'r') as f:
-                return f.read()
+        with open('https://s3.amazonaws.com/cmu-cs-academy.lib.prod/desktop-cmu-graphics/version.txt', 'r') as f:
+            return f.read()
     def make_global(self, name=None, desktop: bool=True, web: bool=True):
         def decorator(func):
             def wrapper(*args, **kwargs):
                 return CMUtils._game.__class__.__dict__[func.__name__](CMUtils._game, *args, **kwargs)
-            if not desktop and self.is_desktop():
+            if not desktop and False:
                 return func
-            if not web and self.is_web():
+            if not web and True:
                 return func
             self._globals[name or func.__name__] = wrapper
             return func
@@ -561,34 +554,20 @@ class CMUtils:
     def is_desktop() -> Literal[True]:
         return sys.implementation.name == 'cpython'
     def run(self):
-        if self.is_desktop():
-            main = sys.modules['__main__']
-            for glob, func in self._globals.items():
-                setattr(main, glob, func)
-            from cmu_graphics import cmu_graphics
-            cmu_graphics.run()
-        else:
-            for glob, func in self._globals.items():
-                globals()[glob] = func
+        for glob, func in self._globals.items():
+            globals()[glob] = func
     def lock_mouse(self):
-        if self.is_desktop():
-            import pygame
-            pygame.mouse.set_visible(False)
-            pygame.event.set_grab(True)
+        pass
         self.locked_mouse = True
     def unlock_mouse(self):
-        if self.is_desktop():
-            import pygame
-            pygame.mouse.set_visible(True)
-            pygame.event.set_grab(False)
+        pass
         self.locked_mouse = False
     def random_color(self) -> 'RGB':
         rng1, rng2, rng3 = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         return rgb(rng1, rng2, rng3)
     @property
     def backend_url(self):
-        if self.is_web():
-            return 'https://backend.academy.cs.cmu.edu/get-image/?url='
+        return 'https://backend.academy.cs.cmu.edu/get-image/?url='
         return ''
 
 
@@ -621,7 +600,7 @@ class Ray:
         if v < 0.0 or u + v > 1.0:
             return None
         t = f * edge2.dot(q)
-        if t <= EPS or t >= self.distance:
+        if t <= EPS or t > self.distance:
             return None
         return t
     def cast(self) -> Triangle | None:
@@ -637,6 +616,7 @@ class Ray:
 import math
 from typing import TYPE_CHECKING
 from cmu_graphics import app
+pass
 class Player:
     def __init__(self, camera: Camera) -> None:
         self.attached_camera = camera
@@ -659,6 +639,8 @@ class Player:
         r = Ray(self.position, dir, dst * 2)
         return r.cast() is not None
     def update(self):
+        s = 48
+        self.collider = Triangle(self.position, Vector3(-s, 0, 0), Vector3(s, 0, 0), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, opacity=1)
         if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or (abs(self.velocity.z) > 0 and self._game_parent.configuration.current.collisions):
             move = self.velocity * app.dt
             for axis_move in (Vector3(move.x, 0, 0), Vector3(0, move.y, 0), Vector3(0, 0, move.z)):
@@ -687,13 +669,17 @@ import math
 from re import L
 from cmu_graphics import Polygon
 class PolygonFactory:
-    def __init__(self, size: int=2000) -> None:
+    def __init__(self, size: int=200) -> None:
         self._pool: list[Polygon]
         self.regen(size)
         self._free: list[Polygon] = self._pool.copy()
         self._in_use: set[Polygon] = set()
     def regen(self, size: int):
-        self._pool = [Polygon(0, 0, 0, 0, 0, 0, visible=False) for _ in range(size)]
+        self._pool = []
+        for _ in range(size):
+            new_poly = Polygon(0, 0, 0, 0, 0, 0, visible=False)
+            new_poly._shape._skip = True
+            self._pool.append(new_poly)
         self._free = self._pool.copy()
         self._in_use = set()
     def reserve(self) -> Polygon:
@@ -701,12 +687,14 @@ class PolygonFactory:
             self.regen(math.floor(len(self._pool) * 1.5))
         poly = self._free.pop()
         self._in_use.add(poly)
+        poly._shape._skip = False
         return poly
     def free(self, poly: Polygon) -> None:
         if poly not in self._in_use:
             return
         self._in_use.remove(poly)
         self._free.append(poly)
+        poly._shape._skip = True
 
 
 # ===== engine/_game.py =====
@@ -716,11 +704,11 @@ import time
 from typing import TYPE_CHECKING, Callable
 from cmu_graphics import *
 utils: 'CMUtils' = CMUtils()
+pass
 class Game:
     def __init__(self):
         global utils
-        if utils.is_desktop():
-            from engine.config import GameConfiguration
+        pass
         self.utils = utils
         utils.register_game(self)
         self.camera = Camera()
@@ -732,7 +720,7 @@ class Game:
         self._triangle_count = 0
         self._triangle_seq = 0
         self.assets = AssetSubsystem(self)
-        self.polygon_factory: 'PolygonFactory' = PolygonFactory(300)
+        self.polygon_factory: 'PolygonFactory' = PolygonFactory(3)
         self.fps = 30
         self._shapes: list['Base3DShape'] = []
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=15)
@@ -766,7 +754,7 @@ class Game:
         forward.x *= -1
         forward.y = 0
         right = Vector3(forward.z, 0, -forward.x).normal
-        speed = 60
+        speed = 16
         if 'w' in keys:
             self.player.velocity += forward * speed * 1
         if 's' in keys:
@@ -805,7 +793,11 @@ class Game:
         self.fps = 1 / _dt
         app.dt = _dt
         for fn in self._events.get('tick', []):
+            start = time.perf_counter()
             fn(_dt)
+            end = time.perf_counter()
+            print(f'{fn.__name__} took {(end - start) * 1000:.2f}ms')
+            pass
         self.frames += 1
         pass
     def add_triangle(self, triangle):
@@ -826,7 +818,6 @@ class Game:
         self._triangle_count = 0
         self._triangle_seq = 0
     def zlayer_screen(self):
-        ci = min(self._triangle_count, math.floor(self._triangle_count * (self.configuration.current.quality * 1.125)))
         tri = self.triangles.copy()
         tri.extend(self.renderables)
         sorted_triangles = sorted(tri, reverse=True, key=lambda tri: tri.z + tri._sort_id * 1e-06 + 4 * (tri.opacity == 100))
@@ -844,18 +835,14 @@ class Game:
             zheight = max(1, 400 // zscale)
             zbuffer = [[float('inf')] * zwidth for _ in range(zheight)]
         sorted_triangles = sorted(self.triangles, reverse=True, key=lambda tri: tri.physical_area * tri.screen_area)
-        if utils.is_desktop():
-            import cmu_graphics.cmu_graphics as cmp
-            cmp.DRAWING_LOCK.__enter__()
+        pass
         try:
             for triangle in sorted_triangles:
                 if zbuffer is not None and (not self._zbuffer_test(triangle, zbuffer, zwidth, zheight, zscale)):
                     continue
                 triangle.draw()
         finally:
-            if utils.is_desktop():
-                import cmu_graphics.cmu_graphics as cmp
-                cmp.DRAWING_LOCK.__exit__(None, None, None)
+            pass
     def _zbuffer_test(self, triangle: Triangle, zbuffer: list[list[float]], zwidth: int, zheight: int, zscale: int) -> bool:
         x0, y0 = triangle.screen[0]
         x1, y1 = triangle.screen[1]
@@ -898,20 +885,25 @@ class Game:
                         row[x] = z
                         visible = True
         return visible
+    def tick_renderables(self):
+        for renderable in self.renderables:
+            if hasattr(renderable, 'tick'):
+                renderable.tick()
     def tick(self):
         self.clear_screen()
         self.camera.tick()
         for shape in self._shapes:
             shape._draw()
         self.render_triangles()
+        if self.configuration.current.process_sprites:
+            self.tick_renderables()
         self.player.update()
         self.zlayer_screen()
     def run(self):
         if self._main_function is not None:
             self._main_function()
         self.utils.run()
-        if self.utils.is_web():
-            self.warning()
+        self.warning()
 
 
 # ===== engine/config.py =====
@@ -922,14 +914,15 @@ class DebugConfiguration:
     wireframe: bool = False
 @dataclass(slots=True)
 class PerformanceConfiguration:
-    minimum_physical_area_cull: int = 50000
+    minimum_physical_area_cull: int = 5000
     zbuffer_enabled: bool = True
-    zbuffer_size: int = 6
-    max_triangles: int = 1950
+    zbuffer_size: int = 4
+    max_triangles: int = 195
     shading: bool = True
     quality: float = 0.8
     shadows: bool = False
     collisions: bool = True
+    process_sprites: bool = False
 @dataclass(slots=True)
 class GameConfiguration:
     debug: DebugConfiguration = DebugConfiguration()
@@ -937,8 +930,7 @@ class GameConfiguration:
     desktop: PerformanceConfiguration = PerformanceConfiguration()
     @property
     def current(self) -> PerformanceConfiguration:
-        if CMUtils.is_desktop():
-            return self.desktop
+        pass
         return self.web
     '\n    min_physical_area_cull: int = 50_000\n    backface_cull: bool = False\n    zbuffer: bool = True\n    zbuffer_scale: int = 6 if utils.is_desktop() else 18\n    fog: float = 1.25 #the strength of the fog\n    max_triangles: int = 1950\n    shading: bool = True\n    quality: float = 0.8  #increase for worse quality\n    cmu_quality: float = 0.125 #for CMU WEB only\n    fps_target: int = 30\n    min_quality: float = 0.25 if utils.is_desktop() else 0.01\n    shadows: bool = utils.is_desktop()\n    '
 
@@ -946,7 +938,7 @@ class GameConfiguration:
 # ===== engine/__init__.py =====
 
 game = Game()
-if not game.utils.is_web():
+if not True:
     import sys
     for name, mod in sys.modules.items():
         if name == 'engine.triangle':
@@ -960,6 +952,7 @@ game.configuration = GameConfiguration()
 # ===== engine/shapes/__init__.py =====
 
 from typing import TYPE_CHECKING
+pass
 from cmu_graphics import rgb
 class Base3DShape:
     def __init__(self, position: Vector3, size: Vector3, fill: 'RGB | None'=None) -> None:
@@ -985,6 +978,7 @@ class Base3DShape:
 import math
 from typing import TYPE_CHECKING
 from cmu_graphics import Circle, rgb
+pass
 class Cube(Base3DShape):
     def draw(self):
         if not self.valid:
@@ -1004,10 +998,107 @@ class Cube(Base3DShape):
             Triangle(self.position, v1, v3, v4, fill=self.fill, rotate=self.rotation)
 
 
+# ===== engine/sprite_ai.py =====
+
+import math
+from typing import TYPE_CHECKING
+pass
+class SpriteAI:
+    def __init__(self, parent: 'Sprite') -> None:
+        self.parent = parent
+        self._active_list: list[Vector3] = []
+        self._active_target: Vector3 | None = None
+        self._path_target: Vector3 | None = None
+        self._track_player: 'Player | None' = None
+        self._last_position = parent.position
+        self._stuck_ticks = 0
+        self.speed = 2
+        pass
+    def tick(self):
+        moved = self.parent.position.distance(self._last_position)
+        if moved < 0.5:
+            self._stuck_ticks += 1
+        else:
+            self._stuck_ticks = 0
+        self._last_position = self.parent.position
+        if self._track_player and self._path_target is None:
+            self._path_target = self._track_player.position
+        if self._track_player and self._stuck_ticks > 20:
+            self._active_list = []
+            self._active_target = None
+            self._path_target = self._track_player.position
+            self._stuck_ticks = 0
+        if self._active_target is None and self._active_list:
+            self._active_target = self._active_list.pop(0)
+        if self._active_target is None and self._path_target is not None:
+            self._active_list = self.pathfind(self.parent.position, self._path_target)
+            self._path_target = None
+            if self._active_list:
+                self._active_target = self._active_list.pop(0)
+        if self._active_target is None:
+            return
+        if self.parent.position.distance(self._active_target) < 40:
+            self._active_target = None
+            return
+        movement_vector = (self._active_target - self.parent.position).normal * self.speed
+        if self.parent.is_touching_player():
+            return
+        if self.parent.is_colliding(movement_vector):
+            move_x = Vector3.new(movement_vector.x, 0, 0)
+            move_z = Vector3.new(0, 0, movement_vector.z)
+            can_move_x = move_x.magnitude > 0 and (not self.parent.is_colliding(move_x))
+            can_move_z = move_z.magnitude > 0 and (not self.parent.is_colliding(move_z))
+            if can_move_x:
+                movement_vector = move_x
+            elif can_move_z:
+                movement_vector = move_z
+            else:
+                self._stuck_ticks += 1
+                return
+        self.parent.position += movement_vector
+    def target(self, object: 'Vector3 | Player'):
+        if isinstance(object, Player):
+            self._track_player = object
+            self._path_target = object.position
+        else:
+            self._track_player = None
+            self._path_target = object
+        self._active_list = []
+        self._active_target = None
+        self._stuck_ticks = 0
+    def valid_point(self, origin: Vector3, point: Vector3) -> bool:
+        movement = point - origin
+        if self.parent.is_colliding_from(origin, movement):
+            return False
+        return True
+    def next_point(self, start: Vector3, end: Vector3) -> Vector3:
+        direction = (end - start).normal
+        step_size = 50
+        direct = start + direction * step_size
+        if self.valid_point(start, direct):
+            return direct
+        for angle in (30, -30, 60, -60, 90, -90, 135, -135, 180):
+            rotated = direction.rotate_y(math.radians(angle))
+            candidate = start + rotated * step_size
+            if self.valid_point(start, candidate):
+                return candidate
+        return start
+    def pathfind(self, start: Vector3, end: Vector3) -> list[Vector3]:
+        steps = 28
+        diff = end - start
+        pts: list[Vector3] = []
+        current = start
+        for i in range(steps):
+            target = start + diff * ((i + 1) / steps)
+            current = self.next_point(current, target)
+            pts.append(current)
+        return pts
+
+
 # ===== engine/sprite.py =====
 
 import math
-from cmu_graphics import Image
+from cmu_graphics import Image, rgb
 class Sprite:
     def __init__(self, sprite: Asset, position: Vector3, size: tuple[int, int]) -> None:
         self.sprite = sprite
@@ -1020,11 +1111,15 @@ class Sprite:
         self._sort_id = 1
         self.opacity = 100
         self.size = size
+        self.ai = SpriteAI(self)
         pass
     def tick(self):
         self._shape.visible = False
         self._sort_id = 1
-        self._proxy = Triangle(self.position, Vector3(-1, -1, 0), Vector3(1, -1, 0), Vector3(0, 1, 0), opacity=100, render_shadow=False, render_lights=False)
+        s = math.hypot(*self.size)
+        self.ai.tick()
+        self._proxy = Triangle(self.position, Vector3(-s, 0, 0), Vector3(s, 0, 0), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, fill=rgb(128, 128, 128), opacity=0)
+        self._proxy_b = Triangle(self.position, Vector3(0, 0, -s), Vector3(0, 0, s), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, fill=rgb(128, 128, 128), opacity=0)
         self.z = self.position.z
         scale = 300 / self.position.distance(self.game.camera.position)
         self.z = self.position.z / scale
@@ -1042,12 +1137,23 @@ class Sprite:
         self._shape.visible = True
         if not self.game:
             return
+    def is_colliding(self, mov: Vector3):
+        return self.is_colliding_from(self.position, mov)
+    def is_colliding_from(self, origin: Vector3, mov: Vector3) -> bool:
+        if mov.magnitude <= 0:
+            return False
+        launch = Ray(origin, mov.normal, mov.magnitude)
+        c = launch.cast()
+        return c is not None
+    def is_touching_player(self):
+        return self.position.distance(self.game.player.position) < 40
 
 
 # ===== engine/shapes/sphere.py =====
 
 import math
 from typing import TYPE_CHECKING
+pass
 class Sphere(Base3DShape):
     def __init__(self, position: Vector3, radius: float, fill: 'RGB') -> None:
         super().__init__(position, Vector3.new(radius * 2, radius * 2, radius * 2), fill=fill)
@@ -1056,8 +1162,8 @@ class Sphere(Base3DShape):
         if not self.valid:
             return
         vertices: list[Vector3] = []
-        lat_steps = 5 if game.utils.is_web() else 15
-        lon_steps = 5 if game.utils.is_web() else 15
+        lat_steps = 5 if True else 15
+        lon_steps = 5 if True else 15
         for i in range(lat_steps + 1):
             theta = i / lat_steps * math.pi
             for j in range(lon_steps + 1):
@@ -1087,26 +1193,23 @@ class Sphere(Base3DShape):
 from operator import pos
 import sys, math
 import time
+from typing import Any
 from cmu_graphics import *
 app.stepsPerSecond = 120
 app.spheres = []
 exCube: Cube
+sp: Sprite
+_points = []
+pass
 @game.on_ready
 def main():
-    global exCube
-    app.fpsLabel = Label('FPS: 0', 370, 20)
-    app.triangleLabel = Label('Triangles: 0', 360, 50)
+    global exCube, sp, _points
     floor = Cube(position=Vector3.new(800, -270, 400), size=Vector3.new(2500, 250, 2500), fill=rgb(0, 255, 0))
-    exCube = Cube(position=Vector3.new(0, 0, 500), size=Vector3.new(100, 100, 100))
-    tri = Triangle(Vector3.zero(), *(Vector3.zero(), Vector3.zero(), Vector3.zero()))
-    v = Sprite(Asset('/home/moakdoge/Desktop/bullcrapv4/995926089329874021.png', 'cmu://881058/45181084/map.png'), Vector3.new(200, 0, 200), (100, 100))
-    app.sp = v
+    exCube = Cube(position=Vector3.new(700, 0, 200), size=Vector3.new(400, 100, 100))
+i = 0
 @game.register_tick
 def step(dt):
-    app.fpsLabel.value = f'FPS: {rounded(1 / dt)}'
-    app.triangleLabel.value = f'Triangles: {game._triangle_count}'
-    app.fpsLabel.toFront()
-    app.triangleLabel.toFront()
-    app.sp.tick()
-    app.sp.position += (game.player.position - app.sp.position).normal * 4
+    print(f'FPS: {rounded(1 / dt)}')
+    pass
+    global i, _points
 game.run()

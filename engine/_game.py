@@ -40,7 +40,7 @@ class Game():
         self._triangle_count = 0
         self._triangle_seq = 0
         self.assets = AssetSubsystem(self)
-        self.polygon_factory: "PolygonFactory" = PolygonFactory(300)
+        self.polygon_factory: "PolygonFactory" = PolygonFactory(3)
         self.fps = 30
         self._shapes: list["Base3DShape"] = []
         self.sun = Light(Vector3.new(900, 900, 900), direction=Vector3.new(-900, -900, -900), brightness=15)
@@ -128,10 +128,14 @@ class Game():
         self.fps = 1/_dt
         app.dt = _dt
         for fn in self._events.get("tick", []):
+            start = time.perf_counter()
             fn(_dt)
+            end = time.perf_counter()
+            print(f"{fn.__name__} took {(end - start)*1000:.2f}ms")
+            pass
         self.frames += 1
         pass
-        
+
     def add_triangle(self, triangle):
         self._triangle_seq += 1
         triangle._sort_id = self._triangle_seq
@@ -153,7 +157,7 @@ class Game():
         self._triangle_seq = 0
     
     def zlayer_screen(self):
-        ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.current.quality*1.125)))
+        #ci=min(self._triangle_count, math.floor(self._triangle_count*(self.configuration.current.quality*1.125)))
         tri = self.triangles.copy()
         tri.extend(self.renderables)
         sorted_triangles = sorted(
@@ -264,11 +268,14 @@ class Game():
                 renderable.tick()
     def tick(self):
         self.clear_screen()
+        #pass
         self.camera.tick()
         for shape in self._shapes:
             shape._draw()
         self.render_triangles()
-        self.tick_renderables()
+        
+        if self.configuration.current.process_sprites:
+            self.tick_renderables()
         self.player.update()
         self.zlayer_screen()
 

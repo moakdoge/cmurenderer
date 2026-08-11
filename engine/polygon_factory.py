@@ -4,17 +4,18 @@ from re import L
 from cmu_graphics import Polygon
 
 class PolygonFactory:
-    def __init__(self, size: int = 2000) -> None:
+    def __init__(self, size: int = 200) -> None:
         self._pool: list[Polygon]
         self.regen(size)
         self._free: list[Polygon] = self._pool.copy()
         self._in_use: set[Polygon] = set()
 
     def regen(self, size: int):
-        self._pool = [
-            Polygon(0, 0, 0, 0, 0, 0, visible=False)
-            for _ in range(size)
-        ]
+        self._pool = []
+        for _ in range(size):
+            new_poly = Polygon(0, 0, 0, 0, 0, 0, visible=False)
+            new_poly._shape._skip = True
+            self._pool.append(new_poly)
         self._free = self._pool.copy()
         self._in_use = set()
 
@@ -24,6 +25,7 @@ class PolygonFactory:
 
         poly = self._free.pop()
         self._in_use.add(poly)
+        poly._shape._skip = False
 
         
         return poly
@@ -38,3 +40,4 @@ class PolygonFactory:
         self._free.append(poly)
 
         #poly.visible = False
+        poly._shape._skip = True

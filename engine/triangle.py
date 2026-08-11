@@ -51,10 +51,12 @@ class Triangle():
 
 
         if render_lights and existing_game.configuration.current.shading:
+            #print("lights..")
             self._real_fill = self.get_fill(fill)
         
         
         if render_shadow and existing_game.configuration.current.shadows:
+            #print("shadow..")
             self.render_shadow()
             
             

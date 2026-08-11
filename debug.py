@@ -11,5 +11,5 @@ profiler.disable()
 
 stats = pstats.Stats(profiler)
 stats.sort_stats("cumulative")
-stats.dump_stats("profile.prof")
+stats.dump_stats("profcile.prof")
 stats.print_stats(30)
