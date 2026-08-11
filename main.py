@@ -34,12 +34,8 @@ def main():
     exCube = Cube(position=Vector3.new(700,0,200), size=Vector3.new(400,100,100))
     #corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
     tri = Triangle(Vector3.zero(), *(Vector3.zero(),Vector3.zero(),Vector3.zero()))
-    v = Sprite(Asset(
-        "/home/moakdoge/Desktop/bullcrapv4/995926089329874021.png",
-        "cmu://881058/45181084/map.png"
-    ), Vector3.new(200,0,200),(100, 100))
     
-    sp = v
+
 i=0
 @game.register_tick
 def step(dt):
@@ -49,8 +45,8 @@ def step(dt):
     app.triangleLabel.value = f"Triangles: {game._triangle_count}"
     app.fpsLabel.toFront()
     app.triangleLabel.toFront()
-    sp.ai.target(game.player)
- #   exCube.rotation += Vector3.new(0.025,0.025,0.025)
-    sp.ai.tick()
+    #sp.ai.target(game.player)
+ #  # exCube.rotation += Vector3.new(0.025,0.025,0.025)
+    #sp.ai.tick()
 
 game.run()
