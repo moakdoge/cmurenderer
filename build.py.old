@@ -1,0 +1,312 @@
+import datetime
+from pathlib import Path
+import ast
+from typing import Any
+
+ROOT = Path(__file__).parent
+ENTRY = ROOT / "main.py"
+OUT = ROOT / "cmu_bundle.py"
+
+seen = set()
+parts: list[str] = []
+
+
+def module_to_path(module: str) -> Path | None:
+    path = ROOT / (module.replace(".", "/") + ".py")
+    if path.exists():
+        return path
+
+    init_path = ROOT / module.replace(".", "/") / "__init__.py"
+    if init_path.exists():
+        return init_path
+
+    return None
+
+
+def local_import_path(node: ast.AST) -> Path | None:
+    if isinstance(node, ast.ImportFrom):
+        if node.module is None:
+            return None
+        return module_to_path(node.module)
+
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            path = module_to_path(alias.name)
+            if path:
+                return path
+
+    return None
+
+
+def strip_local_imports(source: str) -> str:
+    tree = ast.parse(source)
+    lines = source.splitlines()
+
+    remove_lines = set()
+
+    for node in tree.body:
+        path = local_import_path(node)
+        if path:
+            for i in range(node.lineno, node.end_lineno + 1): # type: ignore
+                remove_lines.add(i)
+
+    return "\n".join(
+        line for i, line in enumerate(lines, start=1)
+        if i not in remove_lines
+    )
+
+import io
+import tokenize
+
+
+def strip_comments_and_blank_lines(source: str) -> str:
+    out = []
+
+    for line in source.splitlines():
+        stripped = line.strip()
+
+        if not stripped:
+            continue
+
+        if stripped.startswith("#"):
+            continue
+
+        out.append(line.rstrip())
+
+    return "\n".join(out)
+
+
+
+class ImportGenerator(ast.NodeTransformer):
+    def __init__(self) -> None:
+        self.import_from: list[tuple[str, tuple[str, ...]]] = []
+        self.imports: list[str] = []
+        
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+        if node.module.startswith("engine"):
+            return node
+        self.import_from.append((node.module, tuple([n.name for n in node.names]))) # type: ignore
+        return None
+    
+    def visit_Import(self, node: ast.Import) -> Any:
+        found_names = [n for n in node.names if not n.name.startswith("engine")]
+        self.imports.extend(found_names)
+        return None
+class ReleaseOptimizer(ast.NodeTransformer):
+    _cache: dict[str, Any] = {}
+    seen = set()
+    def visit_Assert(self, node):
+        return None
+    def visit_Import(self, node: ast.Import) -> Any:
+        return None
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+        if node.module.startswith("engine"):
+            return node
+        return None
+    def visit_FunctionDef(self, node):
+        #self.generic_visit(node)
+
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            node.body.pop(0)
+            
+            
+        arg_names = ("self", "cls")
+        has_invalid_args = False
+        for arg in node.args.args:
+            if arg.arg in arg_names:
+                has_invalid_args = True
+                break
+            
+            
+        if "wrapper" in node.name.lower():
+            return node
+        if (
+            len(node.body) == 1 
+            and isinstance(node.body[0], ast.Return)
+            and not has_invalid_args
+        ):
+            self._cache[node.name] = node.body[0].value
+            #print(f"Cached: {self._cache}")
+            return node
+        self.generic_visit(node)
+        return node
+
+    def visit_ClassDef(self, node):
+
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            node.body.pop(0)
+        self.generic_visit(node)
+        return node
+
+    def visit_Module(self, node):
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            node.body.pop(0)
+
+        self.generic_visit(node)
+        return node
+        
+    def visit_If(self, node):
+        # Remove: if TYPE_CHECKING:
+        if (
+            isinstance(node.test, ast.Name)
+            and node.test.id == "TYPE_CHECKING"
+        ):
+            return ast.Pass()
+        
+
+                
+        # Fold: if False:
+        if isinstance(node.test, ast.Constant):
+            if node.test.value is False:
+                # Keep the else branch, if present.
+                return node.orelse or ast.Pass()
+
+            if node.test.value is True:
+                # Keep the body and discard the else branch.
+                return node.body
+
+        self.generic_visit(node)
+        return node
+
+    def visit_Try(self, node: ast.Try) -> Any:
+        all_passes = all(n for n in node.body if n == ast.Pass())
+        
+        has_body = len(node.finalbody) > 0
+        has_exceptions = len(node.handlers) > 0
+        
+        if has_body or has_exceptions:
+            return node
+        
+        if all_passes:
+            return None
+        return node
+    
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            name = node.func.attr
+        else:
+            name = None
+
+        if name == "is_web":
+            return ast.Constant(True)
+        
+        if name == "is_desktop":
+            return ast.Constant(False)
+
+        if name in self._cache:
+            return self._cache[name]
+        self.generic_visit(node)
+        return node
+    
+class DedupeImports(ast.NodeTransformer):
+    def __init__(self) -> None:
+        self._seen_from: set[tuple[str, tuple[str, ...]]] = set()
+        self._seen: set = set()
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+        parts = (node.module if node.module else "", tuple([n.name for n in node.names]))
+        if not parts in self._seen_from:
+            self._seen_from.add(parts)
+            return node
+        return None
+    
+def add_file(path: Path):
+    parts: list[str] = []
+    path = path.resolve()
+
+    if path in seen:
+        return
+
+    seen.add(path)
+
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    t = ImportGenerator()
+    t_o = t.visit(tree)
+    tree = ReleaseOptimizer().visit(tree)
+    tree = ReleaseOptimizer().visit(tree)
+    
+   # tree = ReleaseOptimizer().visit(tree)
+
+
+    #tree.body = [*t.imports, *t.import_from, *tree.body]
+    ast.fix_missing_locations(tree)
+
+    optimized_source = ast.unparse(tree)
+
+    source = strip_local_imports(optimized_source)
+    for node in tree.body:
+        
+        dep = local_import_path(node)
+        if dep:
+            add_file(dep)
+
+
+    fixed: dict[str, list[str]] = {}
+    for mod, alias in t.import_from:
+        if mod not in fixed:
+            fixed[mod] = []
+        fixed[mod].extend(alias)
+
+    seen_imports: set[str] = set()
+    add: list[str] = []
+    for name in t.imports:
+        if name and name not in seen_imports:
+            seen_imports.add(name)
+            add.append(name)
+
+    if add:
+        parts.insert(0, f"import {', '.join([a.name for a in add])}")
+
+    seen_mods: set[tuple[str, tuple[str, ...]]] = set()
+    for mod, alias in fixed.items():
+        alias_tuple = tuple(dict.fromkeys(alias))
+        key = (mod, alias_tuple)
+        if key not in seen_mods:
+            parts.insert(1 if add else 0, f"from {mod} import {', '.join(alias_tuple)}")
+            seen_mods.add(key)
+
+    cleaned = strip_local_imports(source)
+    cleaned = strip_comments_and_blank_lines(cleaned)
+    parts.append(f"\n\n# ===== {path.relative_to(ROOT)} =====\n")
+    parts.append(cleaned)
+    
+    #compiling
+    full_st: str= "\n".join(parts)
+    new = ast.parse(full_st)
+    new_tree = DedupeImports().visit(new)
+    
+    fixed_ast = ast.unparse(new_tree)
+    parts = fixed_ast.split("\n")
+    
+    return parts
+
+
+
+
+
+
+part1 = [
+    "### CREATED BY @MOAKDOGE ###",
+    f"### CREATED ON: {datetime.datetime.now().strftime('%D')} ###",
+]
+
+part1.extend(add_file(ENTRY) or [])
+OUT.write_text("\n".join(parts), encoding="utf-8")
+print(f"Wrote {OUT}")
