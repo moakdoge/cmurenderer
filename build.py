@@ -4,6 +4,12 @@ from buildhelper.loader import Loader
 
 buildhelper.init(Path(__file__).parent)
 
-main = Loader(buildhelper.ROOT / "main.py")
+main = Loader(
+    buildhelper.ROOT / "main.py",
+    "engine"
+)
 
-main.search_modules()
+contents = main.run()
+
+with open(buildhelper.ROOT / "cmu_bundle.py", "w") as f:
+    f.write(contents)

@@ -8,6 +8,9 @@ class FoundModule:
     module: str
     imports: tuple[str, ...]
 
+
+    '''
+    TODO: implement
     @classmethod
     def from_ast_node(cls, node: ast.AST) -> Self:
         if isinstance(node, ast.ImportFrom):
@@ -18,7 +21,8 @@ class FoundModule:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 print(alias.name)
-                
+    '''       
+       
     @property
     def path(self) -> Path:
         path = ROOT / (self.module.replace(".", "/") + ".py")
@@ -30,3 +34,7 @@ class FoundModule:
             return init_path
         
         raise FileNotFoundError(f"Module {self.module} not found!")
+    
+    @property
+    def source(self) -> str:
+        return self.path.read_text()
