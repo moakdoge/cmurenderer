@@ -2,7 +2,7 @@ import math
 
 from engine._types import Vector3Number
 from engine.extras import dataclass
-
+from engine.cmu_utils import CMUtils
 
 _ZERO_VECTOR: "Vector3 | None" = None
 

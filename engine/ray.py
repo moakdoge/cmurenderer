@@ -9,7 +9,7 @@ class Ray:
     direction: "Vector3"
     distance: float = float("inf")
 
-    def intersects(self, tri: Triangle) -> float | None:
+    def intersects(self, tri: "Triangle") -> float | None:
         EPS = 1e-6
 
         p1, p2, p3 = tri._og_points
@@ -46,7 +46,7 @@ class Ray:
             return None
 
         return t
-    def cast(self) -> Triangle | None: 
+    def cast(self) -> "Triangle | None": 
         game = CMUtils._game
         for tri in game.triangles:
             if self.intersects(tri):

@@ -7,6 +7,8 @@ from cmu_graphics import rgb
 if TYPE_CHECKING:
     from engine._game import Game
     from cmu_graphics.shape_logic import RGB
+    
+
 class CMUtils():
     _game: "Game"
     def __init__(self) -> None:
@@ -58,6 +60,7 @@ class CMUtils():
             if not web and self.is_web():
                 return func
             
+        
             self._globals[name or func.__name__] = wrapper
             return func
 
@@ -81,7 +84,6 @@ class CMUtils():
             from cmu_graphics import cmu_graphics
             cmu_graphics.run() # type: ignore
         else:
-    
             for glob, func in self._globals.items():
                 globals()[glob] = func
                 

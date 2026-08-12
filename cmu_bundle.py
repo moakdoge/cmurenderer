@@ -1,34 +1,189 @@
-import os
 import math
-import cmu_graphics.cmu_graphics
-import time
-import cmu_graphics
-import pygame
-import sys
-import cmu_graphics.shape_logic
 import random
-from cmu_graphics import Image
-from types import GenericAlias
-from typing import Any
-from re import L
-from typing import TYPE_CHECKING
-from cmu_graphics import Circle, rgb
-from typing import TYPE_CHECKING, Literal
-from cmu_graphics import cmu_graphics
-from cmu_graphics import Polygon
+import sys
+import time
+import os
 from enum import Enum
-from typing import TypeVar, Type, Callable, Any
-from cmu_graphics.shape_logic import RGB
-from typing import TYPE_CHECKING, Callable
-from typing import TypeAlias
-from typing import Any, Callable, Generic, Type, TypeVar, dataclass_transform, overload
-from __future__ import annotations
-from cmu_graphics import Image, rgb
-from cmu_graphics import *
-from cmu_graphics import app
 from operator import pos
-from cmu_graphics import rgb
+from types import GenericAlias
+from typing import TypeAlias
+from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+from typing import Any, Callable, Generic, Type, TypeVar, dataclass_transform, overload
+from re import L
+from typing import TYPE_CHECKING, Callable
+from typing import TypeVar, Type, Callable, Any
+from __future__ import annotations
+from typing import Any
 pass
+Vector3Number: TypeAlias = float | int
+pass
+pass
+pass
+T = TypeVar('T')
+R = TypeVar('R')
+_NOT_FOUND = object()
+
+class cached_property(Generic[T, R]):
+    func: Callable[[T], R]
+    attrname: str | None
+    __doc__: str | None
+    __module__: str
+
+    def __init__(self, func: Callable[[T], R]) -> None:
+        self.func = func
+        self.attrname = None
+        self.__doc__ = func.__doc__
+        self.__module__ = func.__module__
+
+    def __set_name__(self, owner: type[T], name: str) -> None:
+        if self.attrname is None:
+            self.attrname = name
+        elif name != self.attrname:
+            raise TypeError(f'Cannot assign the same cached_property to two different names ({self.attrname!r} and {name!r}).')
+
+    @overload
+    def __get__(self, instance: None, owner: type[T] | None=None) -> 'cached_property[T, R]':
+        ...
+
+    @overload
+    def __get__(self, instance: T, owner: type[T] | None=None) -> R:
+        ...
+
+    def __get__(self, instance: T | None, owner: type[T] | None=None) -> 'R | cached_property[T, R]':
+        if instance is None:
+            return self
+        if self.attrname is None:
+            raise TypeError('Cannot use cached_property instance without calling __set_name__ on it.')
+        try:
+            cache: dict[str, Any] = instance.__dict__
+        except AttributeError:
+            msg = f"No '__dict__' attribute on {type(instance).__name__!r} instance to cache {self.attrname!r} property."
+            raise TypeError(msg) from None
+        val = cache.get(self.attrname, _NOT_FOUND)
+        if val is _NOT_FOUND:
+            val = self.func(instance)
+            try:
+                cache[self.attrname] = val
+            except TypeError:
+                msg = f"The '__dict__' attribute on {type(instance).__name__!r} instance does not support item assignment for caching {self.attrname!r} property."
+                raise TypeError(msg) from None
+        return val
+    __class_getitem__ = classmethod(GenericAlias)
+pass
+T = TypeVar('T')
+
+@dataclass_transform()
+def dataclass(init: bool=True, frozen: bool=False, slots: bool=False, repr: bool=True):
+
+    def decorator(cls):
+        nonlocal frozen, slots, repr
+        annotations = getattr(cls, '__annotations__', {})
+        fields = tuple(annotations.keys())
+        defaults = {}
+        if slots:
+            namespace = dict(cls.__dict__)
+            namespace.pop('__dict__', None)
+            namespace.pop('__weakref__', None)
+            for name in fields:
+                if name in namespace:
+                    defaults[name] = namespace.pop(name)
+            f = list(fields)
+            f.append('_frozen')
+            namespace['__slots__'] = tuple(f)
+
+            class DataMeta(type):
+
+                def __repr__(cls):
+                    pretty = []
+                    tags = ['[FROZEN]' if frozen else '', '[SLOTS]' if slots else '', '[REPR]' if repr else '', '[INIT]' if init else '']
+                    for k, v in annotations.items():
+                        pretty.append(f'{k}: {v.__name__} = {defaults[k]}' if k in defaults else f"{k}: {getattr(v, '__name__', v)}")
+                    return f"<dataclass {cls.__name__}({','.join(pretty)}) {' '.join(tags)}>"
+            if repr:
+                k = DataMeta
+            else:
+                k = type
+            new_cls = k(cls.__name__, cls.__bases__, namespace)
+            new_cls.__module__ = cls.__module__
+            new_cls.__qualname__ = cls.__qualname__
+            cls = new_cls
+        annotations = getattr(cls, '__annotations__', {})
+        fields = list(annotations.keys())
+
+        def __init__(self, *args, **kwargs):
+            for name, value in zip(fields, args):
+                setattr(self, name, value)
+            for name in fields[len(args):]:
+                if name in kwargs:
+                    setattr(self, name, kwargs[name])
+                elif hasattr(cls, name):
+                    if slots:
+                        setattr(self, name, defaults[name])
+                    else:
+                        setattr(self, name, getattr(cls, name))
+                else:
+                    raise TypeError(f'Missing required argument: {name}')
+            setattr(self, '_frozen', True)
+            if hasattr(self, '__post_init__') and callable(getattr(self, '__post_init__', None)):
+                self.__post_init__()
+
+        def __repr__(self):
+            values = ', '.join((f'{name}={getattr(self, name)!r}' for name in fields))
+            return f'{cls.__name__}({values})'
+        if init:
+            cls.__init__ = __init__
+        if repr:
+            cls.__repr__ = __repr__
+        if frozen:
+
+            def __setattr__(self, k, v):
+                if hasattr(self, '_frozen'):
+                    raise AttributeError(f'{self.__class__.__name__} is frozen!')
+                object.__setattr__(self, k, v)
+            cls.__setattr__ = __setattr__
+        return cls
+    return decorator
+pass
+pass
+
+@dataclass(slots=True)
+class DebugConfiguration:
+    debug: bool = True
+    wireframe: bool = False
+
+@dataclass(slots=True)
+class PerformanceConfiguration:
+    minimum_physical_area_cull: int = 5000
+    zbuffer_enabled: bool = True
+    zbuffer_size: int = 4
+    max_triangles: int = 195
+    shading: bool = True
+    quality: float = 0.8
+    shadows: bool = False
+    collisions: bool = True
+    process_sprites: bool = False
+
+@dataclass(slots=True)
+class GameConfiguration:
+    debug: DebugConfiguration = DebugConfiguration()
+    web: PerformanceConfiguration = PerformanceConfiguration(zbuffer_size=8, max_triangles=400, shading=False, quality=0.25, shadows=False, collisions=False)
+    desktop: PerformanceConfiguration = PerformanceConfiguration()
+
+    @property
+    def current(self) -> PerformanceConfiguration:
+        if CMUtils.is_desktop():
+            return self.desktop
+        return self.web
+    '\n    min_physical_area_cull: int = 50_000\n    backface_cull: bool = False\n    zbuffer: bool = True\n    zbuffer_scale: int = 6 if utils.is_desktop() else 18\n    fog: float = 1.25 #the strength of the fog\n    max_triangles: int = 1950\n    shading: bool = True\n    quality: float = 0.8  #increase for worse quality\n    cmu_quality: float = 0.125 #for CMU WEB only\n    fps_target: int = 30\n    min_quality: float = 0.25 if utils.is_desktop() else 0.01\n    shadows: bool = utils.is_desktop()\n    '
+pass
+pass
+if TYPE_CHECKING:
+    pass
+
+def set_brightness(color: 'RGB', brightness: float) -> 'RGB':
+    assert isinstance(brightness, float) and 0 <= brightness <= 1
+    return rgb(color.red * brightness, color.green * brightness, color.blue * brightness)
 pass
 pass
 pass
@@ -37,26 +192,238 @@ pass
 pass
 if TYPE_CHECKING:
     pass
-pass
+    pass
+    pass
+existing_game: 'Game'
 
-class Cube(Base3DShape):
+class Triangle:
+    __slots__ = ('shadow', 'points', 'position', 'fill', '_count', '_real_fill', 'opacity', 'fogged', 'z', 'screen', 'extracted', '_shape', '_sort_id', 'average_screen_dist', '_og_points')
+
+    def __init__(self, position: Vector3, *points: Vector3, rotate: Vector3 | None=None, fill=rgb(255, 255, 255), pretransformed: bool=False, render_lights: bool=True, skip_near_clip: bool=False, opacity: int=100, render_shadow: bool=True):
+        assert len(points) == 3
+        assert isinstance(position, Vector3)
+        assert all([isinstance(p, Vector3) for p in points])
+        assert isinstance(opacity, int) and 0 <= opacity <= 100
+        self.shadow = None
+        self._og_points: list[Vector3] = [*points]
+        self.points: list[Vector3] = [*points]
+        self.position = position
+        self.fill = fill
+        self._count = len(points)
+        self._real_fill = fill
+        self.opacity = opacity
+        self.fogged = False
+        if render_lights and existing_game.configuration.current.shading:
+            self._real_fill = self.get_fill(fill)
+        if render_shadow and existing_game.configuration.current.shadows:
+            self.render_shadow()
+        if not pretransformed:
+            if rotate is not None:
+                self.points = self.rotate_points(rotate)
+            self.transform(existing_game.camera)
+        clipped = self.get_clip(skip_near_clip)
+        if not clipped:
+            self.delete()
+            return
+        if len(clipped) > 1:
+            existing_game.remove_triangle(self.shadow)
+            self.shadow = None
+            _, second = clipped
+            Triangle(Vector3.zero(), *second, fill=self.fill, pretransformed=True, render_lights=True, skip_near_clip=True, opacity=opacity, render_shadow=False)
+        self.points = list(clipped[0])
+        self._count = len(self.points)
+        self.z = self.get_z()
+        self.screen = self.get_screens()
+        self.extracted = self.get_extracted()
+        existing_game.add_triangle(self)
+        if not self.is_valid():
+            self.delete()
+            return
+
+    def rotate_points(self, mat: Vector3):
+        return [p.rotate(mat) for p in self.points]
+
+    def is_valid(self) -> bool:
+        statements = [self.is_too_small(), self.is_foggy(), self.is_offscreen()]
+        return not any(statements)
+
+    def get_z(self) -> float:
+        z = max((_.z for _ in self.points))
+        if self.opacity < 100:
+            z -= 0.01
+        return z
+
+    def get_screens(self) -> list[tuple[int, int]]:
+        return [_.screen for _ in self.points]
+
+    def get_extracted(self):
+        return [list(sublist) for sublist in self.screen]
+
+    def is_foggy(self) -> bool:
+        lowest = 140
+        v = self.screen_area < lowest and self.physical_area < existing_game.configuration.current.minimum_physical_area_cull
+        return v
+
+    def is_too_small(self) -> bool:
+        centScr = self.center.screen
+        self.average_screen_dist = max((distance(_[0], _[1], centScr[0], centScr[1]) for _ in self.screen))
+        ar = self.area(*self.screen)
+        v = ar < 50 / existing_game.configuration.current.quality and self.physical_area < existing_game.configuration.current.minimum_physical_area_cull
+        return v
+
+    def is_offscreen(self) -> bool:
+        if all((_.offscreen for _ in self.points)) and self.physical_area < 1:
+            return True
+        return False
+
+    def transform(self, camera: 'Camera'):
+        for i, p in enumerate(self.points):
+            self.points[i] = p + self.position - camera.position
+            self.points[i] = self.points[i].rotate(Vector3.new(camera.pitch, camera.yaw, 0))
+
+    def get_fill(self, start: 'RGB') -> 'RGB':
+        tmp_fill = set_brightness(start, 0.8)
+        world_points = self.world_points
+        world_center = self.world_center
+        if existing_game.configuration.current.shading:
+            face_normal = (world_points[1] - world_points[0]).cross(world_points[2] - world_points[0]).normal
+            ambient = 0.35
+            brightness = ambient
+            for light in lights:
+                light_dir = (light.position - world_center).normal
+                diffuse = abs(face_normal.dot(light_dir))
+                dist = light.position.distance(world_center)
+                attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
+                brightness += diffuse * light.brightness * attenuation
+            brightness = max(0.0, min(1.0, brightness))
+            tmp_fill = set_brightness(start, brightness)
+        return tmp_fill
+
+    def render_shadow(self):
+        _p = [Vector3.new(p.x, -50, p.z) for p in self.points]
+        self.shadow = Triangle(self.position - Vector3.new(0, 50, 0), *_p, fill=rgb(0, 0, 0), render_lights=False, skip_near_clip=False, opacity=25, render_shadow=False)
+
+    @property
+    def center(self):
+        return Vector3.new(sum((_.x for _ in self.points)) / self._count, sum((_.y for _ in self.points)) / self._count, sum((_.z for _ in self.points)) / self._count)
+
+    @property
+    def world_points(self):
+        return [p + self.position for p in self.points]
+
+    def get_clip(self, skip: bool=False):
+        return [tuple(self.points)] if skip else self.clip_near()
+
+    @property
+    def world_center(self):
+        world_points = self.world_points
+        return Vector3.new(sum((p.x for p in world_points)) / len(world_points), sum((p.y for p in world_points)) / len(world_points), sum((p.z for p in world_points)) / len(world_points))
 
     def draw(self):
-        if not self.valid:
-            return
-        vertices = [Vector3(-1, -1, -1), Vector3(1, -1, -1), Vector3(1, 1, -1), Vector3(-1, 1, -1), Vector3(-1, -1, 1), Vector3(1, -1, 1), Vector3(1, 1, 1), Vector3(-1, 1, 1)]
-        scaled_vertices = []
-        for v in vertices:
-            scaled_vertices.append(Vector3(v.x * self.size.x / 2, v.y * self.size.y / 2, v.z * self.size.z / 2))
-        faces = [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4), (2, 3, 7, 6), (1, 2, 6, 5), (0, 3, 7, 4)]
-        for face in faces:
-            scale = 1
-            v1 = scaled_vertices[face[0]] * scale
-            v2 = scaled_vertices[face[1]] * scale
-            v3 = scaled_vertices[face[2]] * scale
-            v4 = scaled_vertices[face[3]] * scale
-            Triangle(self.position, v1, v2, v3, fill=self.fill, rotate=self.rotation)
-            Triangle(self.position, v1, v3, v4, fill=self.fill, rotate=self.rotation)
+        self._shape = existing_game.polygon_factory.reserve()
+        self._shape.pointList = self.extracted
+        self._shape.fill = self._real_fill
+        self._shape.zindex = self.z
+        if self.opacity == 100:
+            self._shape.border = self._real_fill
+        else:
+            self._shape.border = None
+        if existing_game.configuration.debug.wireframe:
+            self._shape.fill = None
+        self._shape.opacity = self.opacity
+        self._shape.visible = True
+        self._sort_id = 1 if self.opacity == 100 else -9
+
+    def clip_near(self):
+        points = self.points
+        NEAR = 1.0
+        inside = [p for p in points if p.z >= NEAR]
+        outside = [p for p in points if p.z < NEAR]
+        if len(inside) == 3:
+            return [(points[0], points[1], points[2])]
+        if len(inside) == 0:
+            return []
+        if len(inside) == 1:
+            a = inside[0]
+            b, c = outside
+            ab = a.intersect_near(b)
+            ac = a.intersect_near(c)
+            return [(a, ab, ac)]
+        a, b = inside
+        c = outside[0]
+        ac = a.intersect_near(c)
+        bc = b.intersect_near(c)
+        return [(a, b, ac), (b, bc, ac)]
+
+    def delete(self):
+        if hasattr(self, 'shadow'):
+            existing_game.remove_triangle(self.shadow)
+        if hasattr(self, '_shape'):
+            existing_game.polygon_factory.free(self._shape)
+            self._shape.visible = False
+        existing_game.remove_triangle(self)
+
+    def area(self, p1, p2, p3):
+        return abs((p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0]))
+
+    @property
+    def rendered(self):
+        return self._shape
+
+    @property
+    def screen_area(self):
+        return self.area(*self.extracted)
+
+    @property
+    def physical_area(self):
+        p1, p2, p3 = tuple(self.points)
+        v1 = p2 - p1
+        v2 = p3 - p1
+        cross_product = v1.cross(v2)
+        return 0.5 * cross_product.magnitude
+pass
+pass
+pass
+pass
+
+@dataclass(frozen=True, slots=True)
+class Ray:
+    position: 'Vector3'
+    direction: 'Vector3'
+    distance: float = float('inf')
+
+    def intersects(self, tri: 'Triangle') -> float | None:
+        EPS = 1e-06
+        p1, p2, p3 = tri._og_points
+        p1 = p1 + tri.position
+        p2 = p2 + tri.position
+        p3 = p3 + tri.position
+        edge1 = p2 - p1
+        edge2 = p3 - p1
+        h = self.direction.cross(edge2)
+        a = edge1.dot(h)
+        if -EPS < a < EPS:
+            return None
+        f = 1.0 / a
+        s = self.position - p1
+        u = f * s.dot(h)
+        if u < 0.0 or u > 1.0:
+            return None
+        q = s.cross(edge1)
+        v = f * self.direction.dot(q)
+        if v < 0.0 or u + v > 1.0:
+            return None
+        t = f * edge2.dot(q)
+        if t <= EPS or t > self.distance:
+            return None
+        return t
+
+    def cast(self) -> 'Triangle | None':
+        game = CMUtils._game
+        for tri in game.triangles:
+            if self.intersects(tri):
+                return tri
+        return None
 pass
 pass
 pass
@@ -65,41 +432,110 @@ pass
 if TYPE_CHECKING:
     pass
 pass
+pass
 
-class Sphere(Base3DShape):
+class Player:
 
-    def __init__(self, position: Vector3, radius: float, fill: 'RGB') -> None:
-        super().__init__(position, Vector3.new(radius * 2, radius * 2, radius * 2), fill=fill)
-        self.radius = radius
+    def __init__(self, camera: Camera) -> None:
+        self.attached_camera = camera
+        self.position: Vector3 = Vector3.zero()
+        self.velocity: Vector3 = Vector3.new(0, 0, 0)
+        self.max_health = 100
+        self._game_parent: 'Game'
+        self.health = 100
+
+    def __setattr__(self, name: str, value) -> None:
+        if name == 'position':
+            self.attached_camera.position = value
+        object.__setattr__(self, name, value)
+
+    def on_floor(self):
+        return self.position.y <= 0
+
+    def check_collision(self, vel: Vector3) -> bool:
+        dst = math.hypot(vel.x, vel.y, vel.z)
+        if dst <= 0:
+            return False
+        dir = Vector3(vel.x / dst, vel.y / dst, vel.z / dst)
+        r = Ray(self.position, dir, dst * 2)
+        return r.cast() is not None
+
+    def update(self):
+        s = 48
+        self.collider = Triangle(self.position, Vector3(-s, 0, 0), Vector3(s, 0, 0), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, opacity=1)
+        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or (abs(self.velocity.z) > 0 and self._game_parent.configuration.current.collisions):
+            move = self.velocity * app.dt
+            for axis_move in (Vector3(move.x, 0, 0), Vector3(0, move.y, 0), Vector3(0, 0, move.z)):
+                if axis_move.magnitude <= 0:
+                    continue
+                if not self.check_collision(axis_move):
+                    self.position += axis_move
+                else:
+                    if axis_move.x:
+                        self.velocity.x = 0
+                    if axis_move.y:
+                        self.velocity.y = 0
+                    if axis_move.z:
+                        self.velocity.z = 0
+        self.velocity -= Vector3.new(0, 32, 0)
+        self.velocity *= 0.95
+        if self.position.y < 0:
+            self.position.y = 0
+
+    def jump(self):
+        self.velocity += Vector3.new(0, 140, 0)
+pass
+pass
+if TYPE_CHECKING:
+    pass
+    pass
+
+def make_game() -> 'Game':
+    pass
+    game = Game()
+    if not game.utils.is_web():
+        pass
+        for name, mod in sys.modules.items():
+            if name == 'engine.triangle':
+                mod.existing_game = game
+                break
+    else:
+        existing_game = game
+    game.configuration = GameConfiguration()
+    return game
+game = make_game()
+pass
+pass
+if TYPE_CHECKING:
+    pass
+pass
+pass
+
+class Base3DShape:
+
+    def __init__(self, position: Vector3, size: Vector3, fill: 'RGB | None'=None) -> None:
+        self.position: Vector3 = position
+        self.size: Vector3 = size
+        self.fill: 'RGB' = fill or rgb(255, 0, 0)
+        self.rotation: Vector3 = Vector3.zero()
+        self.valid = True
+        game._shapes.append(self)
+
+    def _draw(self):
+        size, position = (self.size, self.position)
+        ds = position.distance(game.camera.position)
+        sz = ds - max(size.x, size.y, size.z)
+        if sz > 800 * game.configuration.current.quality:
+            return
+        self.draw()
 
     def draw(self):
-        if not self.valid:
-            return
-        vertices: list[Vector3] = []
-        lat_steps = 5 if game.utils.is_web() else 15
-        lon_steps = 5 if game.utils.is_web() else 15
-        for i in range(lat_steps + 1):
-            theta = i / lat_steps * math.pi
-            for j in range(lon_steps + 1):
-                phi = j / lon_steps * 2 * math.pi
-                x = self.size.x * math.sin(theta) * math.cos(phi)
-                y = self.size.y * math.cos(theta)
-                z = self.size.z * math.sin(theta) * math.sin(phi)
-                vertices.append(Vector3(x, y, z))
-        faces = []
-        for i in range(lat_steps):
-            for j in range(lon_steps):
-                p1 = i * (lon_steps + 1) + j
-                p2 = p1 + lon_steps + 1
-                p3 = p2 + 1
-                p4 = p1 + 1
-                faces.append((p1, p2, p3))
-                faces.append((p1, p3, p4))
-        for face in faces:
-            v1 = vertices[face[0]].rotate(self.rotation)
-            v2 = vertices[face[1]].rotate(self.rotation)
-            v3 = vertices[face[2]].rotate(self.rotation)
-            Triangle(self.position, v1, v2, v3, fill=self.fill)
+        raise NotImplementedError
+pass
+pass
+
+class AssetType(Enum):
+    IMAGE = 0
 pass
 pass
 
@@ -136,101 +572,62 @@ class AssetSubsystem:
         return True
 pass
 pass
-
-class AssetType(Enum):
-    IMAGE = 0
-pass
-pass
-pass
-pass
-pass
-pass
-pass
 pass
 
-class Sprite:
+class PolygonFactory:
 
-    def __init__(self, sprite: Asset, position: Vector3, size: tuple[int, int]) -> None:
-        self.sprite = sprite
-        self.position = position
-        self.game = CMUtils._game
-        asset = self.game.assets.load_asset(sprite)
-        self._shape = Image(asset, 100, 100)
-        self.game.renderables.append(self)
-        self.z = self.position.z
-        self._sort_id = 1
-        self.opacity = 100
-        self.size = size
-        self.ai = SpriteAI(self)
-        pass
+    def __init__(self, size: int=200) -> None:
+        self._pool: list[Polygon]
+        self.regen(size)
+        self._free: list[Polygon] = self._pool.copy()
+        self._in_use: set[Polygon] = set()
 
-    def tick(self):
-        self._shape.visible = False
-        self._sort_id = 1
-        s = math.hypot(*self.size)
-        self.ai.tick()
-        self._proxy = Triangle(self.position, Vector3(-s, 0, 0), Vector3(s, 0, 0), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, fill=rgb(128, 128, 128), opacity=0)
-        self._proxy_b = Triangle(self.position, Vector3(0, 0, -s), Vector3(0, 0, s), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, fill=rgb(128, 128, 128), opacity=0)
-        self.z = self.position.z
-        scale = 300 / self.position.distance(self.game.camera.position)
-        self.z = self.position.z / scale
-        if scale < 0.25:
+    def regen(self, size: int):
+        self._pool = []
+        for _ in range(size):
+            new_poly = Polygon(0, 0, 0, 0, 0, 0, visible=False)
+            new_poly._shape._skip = True
+            self._pool.append(new_poly)
+        self._free = self._pool.copy()
+        self._in_use = set()
+
+    def reserve(self) -> Polygon:
+        if not self._free:
+            self.regen(math.floor(len(self._pool) * 1.5))
+        poly = self._free.pop()
+        self._in_use.add(poly)
+        poly._shape._skip = False
+        return poly
+
+    def free(self, poly: Polygon) -> None:
+        if poly not in self._in_use:
             return
-        self._shape.width = self.size[0] * scale
-        self._shape.height = self.size[1] * scale
-        self._shape.opacity = max(0, min(100, scale * 100))
-        if not hasattr(self._proxy, 'screen'):
-            return
-        cX = self._proxy.screen[0][0]
-        cY = self._proxy.screen[0][1]
-        self._shape.centerX = cX
-        self._shape.centerY = cY
-        self._shape.visible = True
-        if not self.game:
-            return
-
-    def is_colliding(self, mov: Vector3):
-        return self.is_colliding_from(self.position, mov)
-
-    def is_colliding_from(self, origin: Vector3, mov: Vector3) -> bool:
-        if mov.magnitude <= 0:
-            return False
-        launch = Ray(origin, mov.normal, mov.magnitude)
-        c = launch.cast()
-        return c is not None
-
-    def is_touching_player(self):
-        return self.position.distance(self.game.player.position) < 40
+        self._in_use.remove(poly)
+        self._free.append(poly)
+        poly._shape._skip = True
+pass
+pass
+pass
+pass
+pass
+pass
+pass
+pass
+pass
+pass
+pass
 pass
 pass
 if TYPE_CHECKING:
     pass
-
-def set_brightness(color: 'RGB', brightness: float) -> 'RGB':
-    assert isinstance(brightness, float) and 0 <= brightness <= 1
-    return rgb(color.red * brightness, color.green * brightness, color.blue * brightness)
-pass
-pass
-pass
-pass
-pass
-pass
-pass
-pass
-pass
-pass
-pass
-pass
-utils: 'CMUtils' = CMUtils()
-pass
-if TYPE_CHECKING:
     pass
-    pass
+utils = CMUtils()
 
 class Game:
 
     def __init__(self):
         global utils
+        utils = CMUtils()
         if utils.is_desktop():
             pass
         self.utils = utils
@@ -553,108 +950,6 @@ pass
 pass
 pass
 pass
-pass
-if TYPE_CHECKING:
-    pass
-pass
-pass
-
-class Player:
-
-    def __init__(self, camera: Camera) -> None:
-        self.attached_camera = camera
-        self.position: Vector3 = Vector3.zero()
-        self.velocity: Vector3 = Vector3.new(0, 0, 0)
-        self.max_health = 100
-        self._game_parent: 'Game'
-        self.health = 100
-
-    def __setattr__(self, name: str, value) -> None:
-        if name == 'position':
-            self.attached_camera.position = value
-        object.__setattr__(self, name, value)
-
-    def on_floor(self):
-        return self.position.y <= 0
-
-    def check_collision(self, vel: Vector3) -> bool:
-        dst = math.hypot(vel.x, vel.y, vel.z)
-        if dst <= 0:
-            return False
-        dir = Vector3(vel.x / dst, vel.y / dst, vel.z / dst)
-        r = Ray(self.position, dir, dst * 2)
-        return r.cast() is not None
-
-    def update(self):
-        s = 48
-        self.collider = Triangle(self.position, Vector3(-s, 0, 0), Vector3(s, 0, 0), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, opacity=1)
-        if abs(self.velocity.x > 0) or abs(self.velocity.y) > 0 or (abs(self.velocity.z) > 0 and self._game_parent.configuration.current.collisions):
-            move = self.velocity * app.dt
-            for axis_move in (Vector3(move.x, 0, 0), Vector3(0, move.y, 0), Vector3(0, 0, move.z)):
-                if axis_move.magnitude <= 0:
-                    continue
-                if not self.check_collision(axis_move):
-                    self.position += axis_move
-                else:
-                    if axis_move.x:
-                        self.velocity.x = 0
-                    if axis_move.y:
-                        self.velocity.y = 0
-                    if axis_move.z:
-                        self.velocity.z = 0
-        self.velocity -= Vector3.new(0, 32, 0)
-        self.velocity *= 0.95
-        if self.position.y < 0:
-            self.position.y = 0
-
-    def jump(self):
-        self.velocity += Vector3.new(0, 140, 0)
-pass
-pass
-pass
-pass
-
-@dataclass(frozen=True, slots=True)
-class Ray:
-    position: 'Vector3'
-    direction: 'Vector3'
-    distance: float = float('inf')
-
-    def intersects(self, tri: Triangle) -> float | None:
-        EPS = 1e-06
-        p1, p2, p3 = tri._og_points
-        p1 = p1 + tri.position
-        p2 = p2 + tri.position
-        p3 = p3 + tri.position
-        edge1 = p2 - p1
-        edge2 = p3 - p1
-        h = self.direction.cross(edge2)
-        a = edge1.dot(h)
-        if -EPS < a < EPS:
-            return None
-        f = 1.0 / a
-        s = self.position - p1
-        u = f * s.dot(h)
-        if u < 0.0 or u > 1.0:
-            return None
-        q = s.cross(edge1)
-        v = f * self.direction.dot(q)
-        if v < 0.0 or u + v > 1.0:
-            return None
-        t = f * edge2.dot(q)
-        if t <= EPS or t > self.distance:
-            return None
-        return t
-
-    def cast(self) -> Triangle | None:
-        game = CMUtils._game
-        for tri in game.triangles:
-            if self.intersects(tri):
-                return tri
-        return None
-pass
-pass
-pass
 _ZERO_VECTOR: 'Vector3 | None' = None
 
 @dataclass(slots=True)
@@ -812,268 +1107,115 @@ class Vector3:
         return a + (b - a) * t
 pass
 pass
-pass
-pass
-pass
-pass
-if TYPE_CHECKING:
-    pass
-    pass
-    pass
-existing_game: 'Game'
+lights: list['Light'] = []
 
-class Triangle:
-    __slots__ = ('shadow', 'points', 'position', 'fill', '_count', '_real_fill', 'opacity', 'fogged', 'z', 'screen', 'extracted', '_shape', '_sort_id', 'average_screen_dist', '_og_points')
+class Light:
+    __slots__ = ('position', 'brightness', 'color', 'direction')
 
-    def __init__(self, position: Vector3, *points: Vector3, rotate: Vector3 | None=None, fill=rgb(255, 255, 255), pretransformed: bool=False, render_lights: bool=True, skip_near_clip: bool=False, opacity: int=100, render_shadow: bool=True):
-        assert len(points) == 3
-        assert isinstance(position, Vector3)
-        assert all([isinstance(p, Vector3) for p in points])
-        assert isinstance(opacity, int) and 0 <= opacity <= 100
-        self.shadow = None
-        self._og_points: list[Vector3] = [*points]
-        self.points: list[Vector3] = [*points]
+    def __init__(self, position: Vector3, direction: Vector3, brightness: float=15, color=rgb(255, 255, 255)):
         self.position = position
-        self.fill = fill
-        self._count = len(points)
-        self._real_fill = fill
-        self.opacity = opacity
-        self.fogged = False
-        if render_lights and existing_game.configuration.current.shading:
-            self._real_fill = self.get_fill(fill)
-        if render_shadow and existing_game.configuration.current.shadows:
-            self.render_shadow()
-        if not pretransformed:
-            if rotate is not None:
-                self.points = self.rotate_points(rotate)
-            self.transform(existing_game.camera)
-        clipped = self.get_clip(skip_near_clip)
-        if not clipped:
-            self.delete()
+        self.brightness = brightness
+        self.color = color
+        self.direction = direction
+        lights.append(self)
+pass
+pass
+pass
+
+class Camera:
+
+    def __init__(self, position: Vector3=Vector3(0, 0, 0)) -> None:
+        self.position = position
+        self.pitch: float = 0
+        self.yaw: float = 0
+        self.roll: float = 0
+        self._x = 0
+        self.light = Light(self.position, self.direction, brightness=60)
+        pass
+
+    def tick(self):
+        self.light.position = self.position
+        self.light.direction = Vector3.new(self.pitch, 0, self.yaw)
+
+    @property
+    def direction(self):
+        return Vector3(math.sin(self.yaw) * math.cos(self.pitch), -math.sin(self.pitch), math.cos(self.yaw) * math.cos(self.pitch)).normal
+
+    @property
+    def ddir(self):
+        yaw, pitch = (self.yaw, self.pitch)
+        return Vector3(-math.sin(yaw) * math.cos(pitch), -math.sin(pitch), math.cos(yaw) * math.cos(pitch)).normal
+
+    def __setattr__(self, name: str, value) -> None:
+        if name == 'pitch':
+            value = max(math.radians(-90), min(math.radians(90), value))
+        object.__setattr__(self, name, value)
+
+    def __repr__(self) -> str:
+        st = f'Camera(position={self.position.__repr__()},yaw={math.ceil(math.degrees(self.yaw))},pitch={math.ceil(math.degrees(self.pitch))},roll={math.ceil(math.degrees(self.roll))})'
+        return st
+pass
+pass
+pass
+pass
+pass
+pass
+pass
+pass
+
+class Sprite:
+
+    def __init__(self, sprite: Asset, position: Vector3, size: tuple[int, int]) -> None:
+        self.sprite = sprite
+        self.position = position
+        self.game = CMUtils._game
+        asset = self.game.assets.load_asset(sprite)
+        self._shape = Image(asset, 100, 100)
+        self.game.renderables.append(self)
+        self.z = self.position.z
+        self._sort_id = 1
+        self.opacity = 100
+        self.size = size
+        self.ai = SpriteAI(self)
+        pass
+
+    def tick(self):
+        self._shape.visible = False
+        self._sort_id = 1
+        s = math.hypot(*self.size)
+        self.ai.tick()
+        self._proxy = Triangle(self.position, Vector3(-s, 0, 0), Vector3(s, 0, 0), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, fill=rgb(128, 128, 128), opacity=0)
+        self._proxy_b = Triangle(self.position, Vector3(0, 0, -s), Vector3(0, 0, s), Vector3(0, s * 2, 0), render_shadow=False, render_lights=False, fill=rgb(128, 128, 128), opacity=0)
+        self.z = self.position.z
+        scale = 300 / self.position.distance(self.game.camera.position)
+        self.z = self.position.z / scale
+        if scale < 0.25:
             return
-        if len(clipped) > 1:
-            existing_game.remove_triangle(self.shadow)
-            self.shadow = None
-            _, second = clipped
-            Triangle(Vector3.zero(), *second, fill=self.fill, pretransformed=True, render_lights=True, skip_near_clip=True, opacity=opacity, render_shadow=False)
-        self.points = list(clipped[0])
-        self._count = len(self.points)
-        self.z = self.get_z()
-        self.screen = self.get_screens()
-        self.extracted = self.get_extracted()
-        existing_game.add_triangle(self)
-        if not self.is_valid():
-            self.delete()
+        self._shape.width = self.size[0] * scale
+        self._shape.height = self.size[1] * scale
+        self._shape.opacity = max(0, min(100, scale * 100))
+        if not hasattr(self._proxy, 'screen'):
             return
-
-    def rotate_points(self, mat: Vector3):
-        return [p.rotate(mat) for p in self.points]
-
-    def is_valid(self) -> bool:
-        statements = [self.is_too_small(), self.is_foggy(), self.is_offscreen()]
-        return not any(statements)
-
-    def get_z(self) -> float:
-        z = max((_.z for _ in self.points))
-        if self.opacity < 100:
-            z -= 0.01
-        return z
-
-    def get_screens(self) -> list[tuple[int, int]]:
-        return [_.screen for _ in self.points]
-
-    def get_extracted(self):
-        return [list(sublist) for sublist in self.screen]
-
-    def is_foggy(self) -> bool:
-        lowest = 140
-        v = self.screen_area < lowest and self.physical_area < existing_game.configuration.current.minimum_physical_area_cull
-        return v
-
-    def is_too_small(self) -> bool:
-        centScr = self.center.screen
-        self.average_screen_dist = max((distance(_[0], _[1], centScr[0], centScr[1]) for _ in self.screen))
-        ar = self.area(*self.screen)
-        v = ar < 50 / existing_game.configuration.current.quality and self.physical_area < existing_game.configuration.current.minimum_physical_area_cull
-        return v
-
-    def is_offscreen(self) -> bool:
-        if all((_.offscreen for _ in self.points)) and self.physical_area < 1:
-            return True
-        return False
-
-    def transform(self, camera: 'Camera'):
-        for i, p in enumerate(self.points):
-            self.points[i] = p + self.position - camera.position
-            self.points[i] = self.points[i].rotate(Vector3.new(camera.pitch, camera.yaw, 0))
-
-    def get_fill(self, start: 'RGB') -> 'RGB':
-        tmp_fill = set_brightness(start, 0.8)
-        world_points = self.world_points
-        world_center = self.world_center
-        if existing_game.configuration.current.shading:
-            face_normal = (world_points[1] - world_points[0]).cross(world_points[2] - world_points[0]).normal
-            ambient = 0.35
-            brightness = ambient
-            for light in lights:
-                light_dir = (light.position - world_center).normal
-                diffuse = abs(face_normal.dot(light_dir))
-                dist = light.position.distance(world_center)
-                attenuation = 1.0 / (1.0 + 0.0025 * dist * dist)
-                brightness += diffuse * light.brightness * attenuation
-            brightness = max(0.0, min(1.0, brightness))
-            tmp_fill = set_brightness(start, brightness)
-        return tmp_fill
-
-    def render_shadow(self):
-        _p = [Vector3.new(p.x, -50, p.z) for p in self.points]
-        self.shadow = Triangle(self.position - Vector3.new(0, 50, 0), *_p, fill=rgb(0, 0, 0), render_lights=False, skip_near_clip=False, opacity=25, render_shadow=False)
-
-    @property
-    def center(self):
-        return Vector3.new(sum((_.x for _ in self.points)) / self._count, sum((_.y for _ in self.points)) / self._count, sum((_.z for _ in self.points)) / self._count)
-
-    @property
-    def world_points(self):
-        return [p + self.position for p in self.points]
-
-    def get_clip(self, skip: bool=False):
-        return [tuple(self.points)] if skip else self.clip_near()
-
-    @property
-    def world_center(self):
-        world_points = self.world_points
-        return Vector3.new(sum((p.x for p in world_points)) / len(world_points), sum((p.y for p in world_points)) / len(world_points), sum((p.z for p in world_points)) / len(world_points))
-
-    def draw(self):
-        self._shape = existing_game.polygon_factory.reserve()
-        self._shape.pointList = self.extracted
-        self._shape.fill = self._real_fill
-        self._shape.zindex = self.z
-        if self.opacity == 100:
-            self._shape.border = self._real_fill
-        else:
-            self._shape.border = None
-        if existing_game.configuration.debug.wireframe:
-            self._shape.fill = None
-        self._shape.opacity = self.opacity
+        cX = self._proxy.screen[0][0]
+        cY = self._proxy.screen[0][1]
+        self._shape.centerX = cX
+        self._shape.centerY = cY
         self._shape.visible = True
-        self._sort_id = 1 if self.opacity == 100 else -9
-
-    def clip_near(self):
-        points = self.points
-        NEAR = 1.0
-        inside = [p for p in points if p.z >= NEAR]
-        outside = [p for p in points if p.z < NEAR]
-        if len(inside) == 3:
-            return [(points[0], points[1], points[2])]
-        if len(inside) == 0:
-            return []
-        if len(inside) == 1:
-            a = inside[0]
-            b, c = outside
-            ab = a.intersect_near(b)
-            ac = a.intersect_near(c)
-            return [(a, ab, ac)]
-        a, b = inside
-        c = outside[0]
-        ac = a.intersect_near(c)
-        bc = b.intersect_near(c)
-        return [(a, b, ac), (b, bc, ac)]
-
-    def delete(self):
-        if hasattr(self, 'shadow'):
-            existing_game.remove_triangle(self.shadow)
-        if hasattr(self, '_shape'):
-            existing_game.polygon_factory.free(self._shape)
-            self._shape.visible = False
-        existing_game.remove_triangle(self)
-
-    def area(self, p1, p2, p3):
-        return abs((p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0]))
-
-    @property
-    def rendered(self):
-        return self._shape
-
-    @property
-    def screen_area(self):
-        return self.area(*self.extracted)
-
-    @property
-    def physical_area(self):
-        p1, p2, p3 = tuple(self.points)
-        v1 = p2 - p1
-        v2 = p3 - p1
-        cross_product = v1.cross(v2)
-        return 0.5 * cross_product.magnitude
-pass
-pass
-pass
-
-class PolygonFactory:
-
-    def __init__(self, size: int=200) -> None:
-        self._pool: list[Polygon]
-        self.regen(size)
-        self._free: list[Polygon] = self._pool.copy()
-        self._in_use: set[Polygon] = set()
-
-    def regen(self, size: int):
-        self._pool = []
-        for _ in range(size):
-            new_poly = Polygon(0, 0, 0, 0, 0, 0, visible=False)
-            new_poly._shape._skip = True
-            self._pool.append(new_poly)
-        self._free = self._pool.copy()
-        self._in_use = set()
-
-    def reserve(self) -> Polygon:
-        if not self._free:
-            self.regen(math.floor(len(self._pool) * 1.5))
-        poly = self._free.pop()
-        self._in_use.add(poly)
-        poly._shape._skip = False
-        return poly
-
-    def free(self, poly: Polygon) -> None:
-        if poly not in self._in_use:
+        if not self.game:
             return
-        self._in_use.remove(poly)
-        self._free.append(poly)
-        poly._shape._skip = True
-pass
-pass
 
-@dataclass(slots=True)
-class DebugConfiguration:
-    debug: bool = True
-    wireframe: bool = False
+    def is_colliding(self, mov: Vector3):
+        return self.is_colliding_from(self.position, mov)
 
-@dataclass(slots=True)
-class PerformanceConfiguration:
-    minimum_physical_area_cull: int = 5000
-    zbuffer_enabled: bool = True
-    zbuffer_size: int = 4
-    max_triangles: int = 195
-    shading: bool = True
-    quality: float = 0.8
-    shadows: bool = False
-    collisions: bool = True
-    process_sprites: bool = False
+    def is_colliding_from(self, origin: Vector3, mov: Vector3) -> bool:
+        if mov.magnitude <= 0:
+            return False
+        launch = Ray(origin, mov.normal, mov.magnitude)
+        c = launch.cast()
+        return c is not None
 
-@dataclass(slots=True)
-class GameConfiguration:
-    debug: DebugConfiguration = DebugConfiguration()
-    web: PerformanceConfiguration = PerformanceConfiguration(zbuffer_size=8, max_triangles=400, shading=False, quality=0.25, shadows=False, collisions=False)
-    desktop: PerformanceConfiguration = PerformanceConfiguration()
-
-    @property
-    def current(self) -> PerformanceConfiguration:
-        if CMUtils.is_desktop():
-            return self.desktop
-        return self.web
-    '\n    min_physical_area_cull: int = 50_000\n    backface_cull: bool = False\n    zbuffer: bool = True\n    zbuffer_scale: int = 6 if utils.is_desktop() else 18\n    fog: float = 1.25 #the strength of the fog\n    max_triangles: int = 1950\n    shading: bool = True\n    quality: float = 0.8  #increase for worse quality\n    cmu_quality: float = 0.125 #for CMU WEB only\n    fps_target: int = 30\n    min_quality: float = 0.25 if utils.is_desktop() else 0.01\n    shadows: bool = utils.is_desktop()\n    '
+    def is_touching_player(self):
+        return self.position.distance(self.game.player.position) < 40
 pass
 pass
 pass
@@ -1179,183 +1321,77 @@ class SpriteAI:
             pts.append(current)
         return pts
 pass
-Vector3Number: TypeAlias = float | int
 pass
 pass
 pass
-T = TypeVar('T')
-R = TypeVar('R')
-_NOT_FOUND = object()
-
-class cached_property(Generic[T, R]):
-    func: Callable[[T], R]
-    attrname: str | None
-    __doc__: str | None
-    __module__: str
-
-    def __init__(self, func: Callable[[T], R]) -> None:
-        self.func = func
-        self.attrname = None
-        self.__doc__ = func.__doc__
-        self.__module__ = func.__module__
-
-    def __set_name__(self, owner: type[T], name: str) -> None:
-        if self.attrname is None:
-            self.attrname = name
-        elif name != self.attrname:
-            raise TypeError(f'Cannot assign the same cached_property to two different names ({self.attrname!r} and {name!r}).')
-
-    @overload
-    def __get__(self, instance: None, owner: type[T] | None=None) -> 'cached_property[T, R]':
-        ...
-
-    @overload
-    def __get__(self, instance: T, owner: type[T] | None=None) -> R:
-        ...
-
-    def __get__(self, instance: T | None, owner: type[T] | None=None) -> 'R | cached_property[T, R]':
-        if instance is None:
-            return self
-        if self.attrname is None:
-            raise TypeError('Cannot use cached_property instance without calling __set_name__ on it.')
-        try:
-            cache: dict[str, Any] = instance.__dict__
-        except AttributeError:
-            msg = f"No '__dict__' attribute on {type(instance).__name__!r} instance to cache {self.attrname!r} property."
-            raise TypeError(msg) from None
-        val = cache.get(self.attrname, _NOT_FOUND)
-        if val is _NOT_FOUND:
-            val = self.func(instance)
-            try:
-                cache[self.attrname] = val
-            except TypeError:
-                msg = f"The '__dict__' attribute on {type(instance).__name__!r} instance does not support item assignment for caching {self.attrname!r} property."
-                raise TypeError(msg) from None
-        return val
-    __class_getitem__ = classmethod(GenericAlias)
 pass
-T = TypeVar('T')
-
-@dataclass_transform()
-def dataclass(init: bool=True, frozen: bool=False, slots: bool=False, repr: bool=True):
-
-    def decorator(cls):
-        nonlocal frozen, slots, repr
-        annotations = getattr(cls, '__annotations__', {})
-        fields = tuple(annotations.keys())
-        defaults = {}
-        if slots:
-            namespace = dict(cls.__dict__)
-            namespace.pop('__dict__', None)
-            namespace.pop('__weakref__', None)
-            for name in fields:
-                if name in namespace:
-                    defaults[name] = namespace.pop(name)
-            f = list(fields)
-            f.append('_frozen')
-            namespace['__slots__'] = tuple(f)
-
-            class DataMeta(type):
-
-                def __repr__(cls):
-                    pretty = []
-                    tags = ['[FROZEN]' if frozen else '', '[SLOTS]' if slots else '', '[REPR]' if repr else '', '[INIT]' if init else '']
-                    for k, v in annotations.items():
-                        pretty.append(f'{k}: {v.__name__} = {defaults[k]}' if k in defaults else f"{k}: {getattr(v, '__name__', v)}")
-                    return f"<dataclass {cls.__name__}({','.join(pretty)}) {' '.join(tags)}>"
-            if repr:
-                k = DataMeta
-            else:
-                k = type
-            new_cls = k(cls.__name__, cls.__bases__, namespace)
-            new_cls.__module__ = cls.__module__
-            new_cls.__qualname__ = cls.__qualname__
-            cls = new_cls
-        annotations = getattr(cls, '__annotations__', {})
-        fields = list(annotations.keys())
-
-        def __init__(self, *args, **kwargs):
-            for name, value in zip(fields, args):
-                setattr(self, name, value)
-            for name in fields[len(args):]:
-                if name in kwargs:
-                    setattr(self, name, kwargs[name])
-                elif hasattr(cls, name):
-                    if slots:
-                        setattr(self, name, defaults[name])
-                    else:
-                        setattr(self, name, getattr(cls, name))
-                else:
-                    raise TypeError(f'Missing required argument: {name}')
-            setattr(self, '_frozen', True)
-            if hasattr(self, '__post_init__') and callable(getattr(self, '__post_init__', None)):
-                self.__post_init__()
-
-        def __repr__(self):
-            values = ', '.join((f'{name}={getattr(self, name)!r}' for name in fields))
-            return f'{cls.__name__}({values})'
-        if init:
-            cls.__init__ = __init__
-        if repr:
-            cls.__repr__ = __repr__
-        if frozen:
-
-            def __setattr__(self, k, v):
-                if hasattr(self, '_frozen'):
-                    raise AttributeError(f'{self.__class__.__name__} is frozen!')
-                object.__setattr__(self, k, v)
-            cls.__setattr__ = __setattr__
-        return cls
-    return decorator
+if TYPE_CHECKING:
+    pass
 pass
-pass
-lights: list['Light'] = []
 
-class Light:
-    __slots__ = ('position', 'brightness', 'color', 'direction')
+class Sphere(Base3DShape):
 
-    def __init__(self, position: Vector3, direction: Vector3, brightness: float=15, color=rgb(255, 255, 255)):
-        self.position = position
-        self.brightness = brightness
-        self.color = color
-        self.direction = direction
-        lights.append(self)
+    def __init__(self, position: Vector3, radius: float, fill: 'RGB') -> None:
+        super().__init__(position, Vector3.new(radius * 2, radius * 2, radius * 2), fill=fill)
+        self.radius = radius
+
+    def draw(self):
+        if not self.valid:
+            return
+        vertices: list[Vector3] = []
+        lat_steps = 5 if game.utils.is_web() else 15
+        lon_steps = 5 if game.utils.is_web() else 15
+        for i in range(lat_steps + 1):
+            theta = i / lat_steps * math.pi
+            for j in range(lon_steps + 1):
+                phi = j / lon_steps * 2 * math.pi
+                x = self.size.x * math.sin(theta) * math.cos(phi)
+                y = self.size.y * math.cos(theta)
+                z = self.size.z * math.sin(theta) * math.sin(phi)
+                vertices.append(Vector3(x, y, z))
+        faces = []
+        for i in range(lat_steps):
+            for j in range(lon_steps):
+                p1 = i * (lon_steps + 1) + j
+                p2 = p1 + lon_steps + 1
+                p3 = p2 + 1
+                p4 = p1 + 1
+                faces.append((p1, p2, p3))
+                faces.append((p1, p3, p4))
+        for face in faces:
+            v1 = vertices[face[0]].rotate(self.rotation)
+            v2 = vertices[face[1]].rotate(self.rotation)
+            v3 = vertices[face[2]].rotate(self.rotation)
+            Triangle(self.position, v1, v2, v3, fill=self.fill)
 pass
 pass
 pass
+pass
+pass
+pass
+pass
+if TYPE_CHECKING:
+    pass
+pass
 
-class Camera:
+class Cube(Base3DShape):
 
-    def __init__(self, position: Vector3=Vector3(0, 0, 0)) -> None:
-        self.position = position
-        self.pitch: float = 0
-        self.yaw: float = 0
-        self.roll: float = 0
-        self._x = 0
-        self.light = Light(self.position, self.direction, brightness=60)
-        pass
-
-    def tick(self):
-        self.light.position = self.position
-        self.light.direction = Vector3.new(self.pitch, 0, self.yaw)
-
-    @property
-    def direction(self):
-        return Vector3(math.sin(self.yaw) * math.cos(self.pitch), -math.sin(self.pitch), math.cos(self.yaw) * math.cos(self.pitch)).normal
-
-    @property
-    def ddir(self):
-        yaw, pitch = (self.yaw, self.pitch)
-        return Vector3(-math.sin(yaw) * math.cos(pitch), -math.sin(pitch), math.cos(yaw) * math.cos(pitch)).normal
-
-    def __setattr__(self, name: str, value) -> None:
-        if name == 'pitch':
-            value = max(math.radians(-90), min(math.radians(90), value))
-        object.__setattr__(self, name, value)
-
-    def __repr__(self) -> str:
-        st = f'Camera(position={self.position.__repr__()},yaw={math.ceil(math.degrees(self.yaw))},pitch={math.ceil(math.degrees(self.pitch))},roll={math.ceil(math.degrees(self.roll))})'
-        return st
+    def draw(self):
+        if not self.valid:
+            return
+        vertices = [Vector3(-1, -1, -1), Vector3(1, -1, -1), Vector3(1, 1, -1), Vector3(-1, 1, -1), Vector3(-1, -1, 1), Vector3(1, -1, 1), Vector3(1, 1, 1), Vector3(-1, 1, 1)]
+        scaled_vertices = []
+        for v in vertices:
+            scaled_vertices.append(Vector3(v.x * self.size.x / 2, v.y * self.size.y / 2, v.z * self.size.z / 2))
+        faces = [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4), (2, 3, 7, 6), (1, 2, 6, 5), (0, 3, 7, 4)]
+        for face in faces:
+            scale = 1
+            v1 = scaled_vertices[face[0]] * scale
+            v2 = scaled_vertices[face[1]] * scale
+            v3 = scaled_vertices[face[2]] * scale
+            v4 = scaled_vertices[face[3]] * scale
+            Triangle(self.position, v1, v2, v3, fill=self.fill, rotate=self.rotation)
+            Triangle(self.position, v1, v3, v4, fill=self.fill, rotate=self.rotation)
 pass
 pass
 pass
@@ -1366,6 +1402,7 @@ pass
 pass
 pass
 pass
+game = make_game()
 pass
 pass
 app.stepsPerSecond = 120

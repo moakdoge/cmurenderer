@@ -6,7 +6,11 @@ buildhelper.init(Path(__file__).parent)
 
 main = Loader(
     buildhelper.ROOT / "main.py",
-    "engine"
+    "engine",
+    ignore_packages=["cmu_graphics", 
+                     "cmu_graphics.shape_logic",
+                     "cmu_graphics.cmu_graphics",
+                     "pygame"]
 )
 
 contents = main.run()

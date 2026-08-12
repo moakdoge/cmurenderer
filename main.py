@@ -7,7 +7,10 @@ from engine.shapes.cube import Cube
 from engine.sprite import Sprite
 from engine.triangle import Triangle
 from engine.vector3 import Vector3
-from engine import game
+from engine import make_game
+
+game = make_game()
+
 from engine.ray import Ray
 
 
@@ -25,7 +28,7 @@ exCube: Cube
 sp: Sprite
 _points = []
 
-if game.utils.is_desktop():
+if game.utils.is_desktop() and False:
     #stub the shit out of that stupid type checker
     import cmu_graphics.shape_logic as sl
     import cmu_graphics.cmu_graphics as cmgrph
@@ -78,6 +81,8 @@ def main():
     #sphere1 = Sphere(position=Vector3.new(0,0,400), fill=rgb(255,0,0), radius=100)
     floor = Cube(position=Vector3.new(800,-270,400), size=Vector3.new(2500, 250, 2500), fill=rgb(0,255,0))
     exCube = Cube(position=Vector3.new(700,0,200), size=Vector3.new(400,100,100))   
+    
+    
     #corcle = Sphere(position=Vector3.new(1000, 0, 500), radius=50, fill=rgb(0,0,255))
    # tri = Triangle(Vector3.zero(), *(Vector3.zero(),Vector3.zero(),Vector3.zero()))
    # print(type(app._app._tlg._shape).children.fget)
@@ -97,6 +102,7 @@ def step(dt):
     #sp.ai.tick()
 
 #print(app._app._tlg._shape)
+
 
 
 game.run()

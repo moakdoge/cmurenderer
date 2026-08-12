@@ -14,7 +14,6 @@ from engine.ray import Ray
 
 
 from engine.cmu_utils import CMUtils
-utils: "CMUtils" = CMUtils()
 from engine.polygon_factory import PolygonFactory
 if TYPE_CHECKING:
     from engine.shapes import Base3DShape
@@ -22,12 +21,11 @@ if TYPE_CHECKING:
 
 
 
+utils = CMUtils()
 class Game():
-
     def __init__(self):
-        global utils
-        if utils.is_desktop():
-            from engine.config import GameConfiguration
+        #if utils.is_desktop():
+        from engine.config import GameConfiguration
         
         self.utils = utils
         utils.register_game(self)
@@ -122,6 +120,7 @@ class Game():
             
     @utils.make_global()
     def onStep(self):
+
         _dt = time.perf_counter() - self._last_dt
         self._last_dt = time.perf_counter()
         self.tick()
@@ -280,7 +279,6 @@ class Game():
         self.zlayer_screen()
 
     def run(self):
-        
         if self._main_function is not None:
             self._main_function()
         self.utils.run()
