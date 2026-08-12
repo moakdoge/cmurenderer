@@ -1,9 +1,9 @@
 from pathlib import Path
 
 
-ROOT: Path
+ROOT: Path = Path()
 
 
 def init(root: Path):
-    global root
+    global ROOT
     ROOT = root
